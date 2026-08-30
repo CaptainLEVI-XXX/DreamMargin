@@ -1,0 +1,23 @@
+# OS and editor files
+.DS_Store
+**/.DS_Store
+.vscode/
+
+# Node / frontend
+node_modules/
+client/node_modules/
+client/.next/
+client/dist/
+client/build/
+
+# Foundry / smart contracts
+contracts/cache/
+contracts/out/
+contracts/broadcast/
+contracts/lib/*/cache/
+contracts/lib/*/out/
+
+# Environment files
+.env
+.env.*
+*.log
