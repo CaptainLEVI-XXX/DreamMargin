@@ -133,8 +133,7 @@ separate, reviewable commit.
 Keep component code inside its component directory. Shared repository files,
 such as this guide and root-level automation, belong at the root.
 
-The contract project is organised by kind, one meaningful level deep. The
-normative map lives in `contracts/docs/Writing-guide.md`:
+The contract project is organised by kind, one meaningful level deep:
 
 ```text
 contracts/
