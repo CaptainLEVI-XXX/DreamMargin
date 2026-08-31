@@ -5,15 +5,13 @@ import {Script} from "forge-std/Script.sol";
 import {Counter} from "../src/Counter.sol";
 
 contract CounterScript is Script {
-    Counter public counter;
+  Counter public counter;
 
-    function setUp() public {}
+  function run() public {
+    vm.startBroadcast();
 
-    function run() public {
-        vm.startBroadcast();
+    counter = new Counter();
 
-        counter = new Counter();
-
-        vm.stopBroadcast();
-    }
+    vm.stopBroadcast();
+  }
 }
