@@ -57,7 +57,7 @@ FOUNDRY_PROFILE=fork forge test -vv
 Fork tests should use pinned deployments and should not make normal unit, fuzz,
 or invariant runs depend on external infrastructure. A public RPC may be the
 default; use an environment variable such as `MAINNET_RPC_URL` to override it
-for CI or local reliability. Never commit provider credentials or private keys.
+for local reliability. Never commit provider credentials or private keys.
 
 For frontend work, use the package manager selected by the lockfile in
 `client/`. Run the formatter, linter, type checker, tests, and production build
@@ -69,9 +69,9 @@ Use a short Conventional Commit type followed by a descriptive kebab-case
 name:
 
 ```text
-feat/anchor-math-library
-fix/decay-price-distortion
-test/solvency-invariants
+feat/position-risk-library
+fix/debt-share-rounding
+test/dreammargin-invariants
 docs/contribution-guide
 refactor/fee-accrual
 ```
@@ -110,10 +110,10 @@ Allowed types are `feat`, `fix`, `test`, `docs`, `refactor`, `perf`, `chore`,
 Examples:
 
 ```text
-feat(amm): add weighted-basket cost function
-fix(liquidity): preserve prices when rescaling q
-test(amm): fuzz solvency across buy and sell paths
-audit(amm): prevent zero-price underflow at high cap factor
+feat(position): add atomic leveraged opening
+fix(vault): round debt-share conversions upward
+test(invariant): fuzz debt and collateral conservation
+audit(oracle): reject recycled DreamDEX pool generations
 ```
 
 Repository hooks are part of the contribution policy. If a hook reports a
@@ -125,26 +125,39 @@ separate, reviewable commit.
 Keep component code inside its component directory. Shared repository files,
 such as this guide and root-level automation, belong at the root.
 
-The contract project is organised by kind, one level deep:
+The contract project is organised by kind, one meaningful level deep. The
+normative map lives in `contracts/docs/Writing-guide.md`:
 
 ```text
 contracts/
 ├── src/
-│   ├── gnosis/
-│   │   ├── ScalarMarketController.sol
+│   ├── dreammargin/
+│   │   ├── DreamMarginController.sol
 │   │   └── base/
+│   │       ├── PositionOpen.sol
+│   │       ├── PositionClose.sol
+│   │       ├── PositionLiquidation.sol
+│   │       └── PositionSettlement.sol
+│   ├── vault/
+│   │   └── DreamMarginVault.sol
+│   ├── oracle/
+│   │   └── DreamDexMarkOracle.sol
+│   ├── adapters/
+│   │   └── DreamDexAdapter.sol
 │   ├── interfaces/
-│   │   ├── gnosis/
+│   │   ├── dreammargin/
 │   │   └── integrations/
 │   └── libs/
-│       └── gnosis/
+│       └── dreammargin/
 ├── test/
-│   ├── gnosis/
+│   ├── dreammargin/
+│   ├── vault/
 │   ├── libs/
-│   │   └── gnosis/
 │   ├── fork/
-│   ├── mock/
+│   ├── invariant/
 │   ├── audit/
+│   ├── mock/
+│   ├── reference/
 │   └── poc/
 └── script/
 ```
@@ -152,20 +165,24 @@ contracts/
 Do not add a directory that only wraps one other directory. If a second product
 is introduced, give it a parallel directory under each relevant kind.
 
-For Gnosis controller code, use the first matching location:
+For DreamMargin contract code, use the first matching location:
 
 | Question | Location |
 |---|---|
-| A constant or storage slot? | `contracts/src/libs/gnosis/LibGnosisConstants.sol` |
-| A reason to revert? | `contracts/src/libs/gnosis/LibGnosisErrors.sol` |
-| Pure payoff logic? | `contracts/src/libs/gnosis/LibPayoffCurve.sol` |
-| Owns a lifecycle slice over shared storage? | `contracts/src/gnosis/base/*.sol` |
-| An external entrypoint? | `contracts/src/gnosis/ScalarMarketController.sol` |
+| A constant? | `contracts/src/libs/dreammargin/LibDreamMarginConstants.sol` |
+| A reason to revert? | `contracts/src/libs/dreammargin/LibDreamMarginErrors.sol` |
+| Controller, vault, or oracle state? | Its namespaced storage library under `contracts/src/libs/dreammargin/` |
+| Pure position-risk logic? | `contracts/src/libs/dreammargin/LibPositionRisk.sol` |
+| A DreamDEX ABI? | `contracts/src/interfaces/integrations/` |
+| Venue-specific execution? | `contracts/src/adapters/DreamDexAdapter.sol` |
+| Owns a lifecycle slice? | `contracts/src/dreammargin/base/*.sol` |
+| An external controller entrypoint? | `contracts/src/dreammargin/DreamMarginController.sol` |
 
 Contract dependencies should flow in this order:
 
 ```text
-constants -> errors -> storage -> pure libraries -> interfaces -> mixins -> facade
+constants -> errors -> storage -> pure libraries -> interfaces
+          -> adapters/oracles/vault -> lifecycle modules -> facade
 ```
 
 ## Solidity Conventions
@@ -186,7 +203,7 @@ constants -> errors -> storage -> pure libraries -> interfaces -> mixins -> faca
 - Import external dependencies through remappings, for example
   `solady/utils/FixedPointMathLib.sol`.
 - Import internal code through full project paths, for example
-  `src/libs/gnosis/LibGnosisStorage.sol`.
+  `src/libs/dreammargin/LibDreamMarginStorage.sol`.
 - Do not use relative or wildcard imports.
 - Separate mixins, interfaces, libraries, and external dependencies with blank
   lines.
@@ -204,7 +221,7 @@ Declare custom errors in the product's error library, revert with them directly,
 and include the offending value:
 
 ```solidity
-revert LibAmmErrors.AnchorCapped(anchor);
+revert LibDreamMarginErrors.UnsupportedMarket(marketId, pool, nonce);
 ```
 
 Do not add an assembly-based custom-revert wrapper when the configured build
@@ -244,11 +261,12 @@ A pull request that changes behaviour is not reviewable without tests.
 - Give pure math libraries differential tests against an independent reference
   implementation. Do not rely only on hand-computed constants.
 - Give every protocol invariant a Foundry invariant test named for its
-  identifier, such as `invariant_I3_solvency` or
-  `invariant_I5b_spreadBound`.
+  identifier, such as `invariant_DM_I3_noNakedDebt` or
+  `invariant_DM_I10_vaultAssetsReconcile`.
 - Give every bug fix a permanent regression test in `contracts/test/audit/`,
   named for the behaviour it protects, such as
-  `test_decayPreservesPrices`. Do not delete regression tests after the fix.
+  `test_recycledPoolCannotMutatePosition`. Do not delete regression tests
+  after the fix.
 - Put resolved vulnerability reproductions in `contracts/test/poc/`.
 - Keep local integration models in `contracts/test/mock/` and deployed-network
   integration tests in `contracts/test/fork/`.
@@ -258,7 +276,7 @@ A pull request that changes behaviour is not reviewable without tests.
   adversarial call sequences—not only the happy path.
 
 Invariant suites may be too slow for a normal pre-push hook, but they must run
-before a pull request is opened and in CI.
+before a pull request is opened.
 
 ## Pull Requests
 
