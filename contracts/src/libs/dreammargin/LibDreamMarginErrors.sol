@@ -182,6 +182,29 @@ library LibDreamMarginErrors {
   /// @param minimumInterval Required interval in seconds.
   error ObservationTooSoon(uint256 elapsed, uint256 minimumInterval);
 
+  /// @notice Raised when an oracle generation was already configured immutably.
+  /// @param generationKey Existing generation identifier.
+  error GenerationAlreadyConfigured(bytes32 generationKey);
+
+  /// @notice Raised when the bounded visible book cannot cover configured observation size.
+  /// @param generationKey Generation being sampled.
+  /// @param filledQuantity Quantity covered by visible valid levels.
+  /// @param requiredQuantity Configured observation quantity.
+  error InsufficientBookDepth(
+    bytes32 generationKey, uint256 filledQuantity, uint256 requiredQuantity
+  );
+
+  /// @notice Raised when top-of-book prices are crossed or a level violates binary price bounds.
+  /// @param pool Pool whose book is invalid.
+  /// @param bidPrice Current or offending bid price.
+  /// @param askPrice Current or offending ask price.
+  error InvalidBook(address pool, uint256 bidPrice, uint256 askPrice);
+
+  /// @notice Raised when risk-increasing valuation is requested at or after market expiry.
+  /// @param expiry Market expiry timestamp.
+  /// @param currentTime Current timestamp.
+  error MarketExpired(uint256 expiry, uint256 currentTime);
+
   /// @notice Raised when a risk increase would cross a configured debt ceiling.
   /// @param scope Identifier of the cap scope.
   /// @param resultingDebt Debt after the requested change.
@@ -227,6 +250,11 @@ library LibDreamMarginErrors {
   /// @param caller Unauthorized caller.
   /// @param controller Authorized controller.
   error NotController(address caller, address controller);
+
+  /// @notice Raised when a non-configurator attempts to mutate oracle policy.
+  /// @param caller Unauthorized caller.
+  /// @param configurator Authorized immutable configurator.
+  error NotConfigurator(address caller, address configurator);
 
   /// @notice Raised when a terminal action is requested before settlement finalization.
   /// @param outcomeId Outcome ID without a frozen terminal record.

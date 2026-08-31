@@ -13,10 +13,39 @@ import {
 } from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.sol";
 
 interface IDreamDexMarkOracle {
+  /// @notice Emitted when one immutable generation observation policy is registered.
+  /// @param generationKey Full generation identifier.
+  event GenerationConfigured(bytes32 indexed generationKey);
+
+  /// @notice Emitted when a configured generation is permanently disabled.
+  /// @param generationKey Full generation identifier.
+  event GenerationDisabled(bytes32 indexed generationKey);
+
+  /// @notice Emitted when a permissionless book sample enters the ring.
+  /// @param generationKey Full generation identifier.
+  /// @param index Physical ring index written.
+  /// @param timestamp Observation timestamp.
+  /// @param conservativeMark Accepted depth-aware mark.
+  event ObservationRecorded(
+    bytes32 indexed generationKey, uint16 index, uint40 timestamp, uint128 conservativeMark
+  );
+
+  /// @notice Returns the immutable DreamDEX module binding.
+  /// @return module_ DreamDEX binary module address.
+  function module() external view returns (address module_);
+
+  /// @notice Returns the immutable generation configurator.
+  /// @return configurator_ Account permitted to register or disable generations.
+  function configurator() external view returns (address configurator_);
+
   /// @notice Configures one exact generation observation policy through bounded governance.
   /// @param generationKey Full market-generation key.
   /// @param config Observation policy and immutable generation tuple.
   function configureGeneration(bytes32 generationKey, OracleConfig calldata config) external;
+
+  /// @notice Permanently stops observations and risk-increasing reads for one generation.
+  /// @param generationKey Full market-generation key.
+  function disableGeneration(bytes32 generationKey) external;
 
   /// @notice Samples the current on-chain DreamDEX book for an eligible generation.
   /// @param generationKey Full market-generation key.
