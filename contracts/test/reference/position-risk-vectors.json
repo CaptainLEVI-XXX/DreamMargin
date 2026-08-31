@@ -1,0 +1,321 @@
+{
+  "book_levels": {
+    "asks": [
+      {
+        "price": 350001,
+        "quantity": 2000000
+      },
+      {
+        "price": 400001,
+        "quantity": 3000000
+      },
+      {
+        "price": 450001,
+        "quantity": 5000000
+      }
+    ],
+    "bids": [
+      {
+        "price": 600000,
+        "quantity": 2000000
+      },
+      {
+        "price": 550000,
+        "quantity": 3000000
+      },
+      {
+        "price": 500000,
+        "quantity": 5000000
+      }
+    ]
+  },
+  "books": [
+    {
+      "ask": {
+        "average": 0,
+        "complete": true,
+        "filled": 0,
+        "value": 0
+      },
+      "bid": {
+        "average": 0,
+        "complete": true,
+        "filled": 0,
+        "value": 0
+      },
+      "quantity": 0
+    },
+    {
+      "ask": {
+        "average": 1000000,
+        "complete": true,
+        "filled": 1,
+        "value": 1
+      },
+      "bid": {
+        "average": 0,
+        "complete": true,
+        "filled": 1,
+        "value": 0
+      },
+      "quantity": 1
+    },
+    {
+      "ask": {
+        "average": 350001,
+        "complete": true,
+        "filled": 2000000,
+        "value": 700002
+      },
+      "bid": {
+        "average": 600000,
+        "complete": true,
+        "filled": 2000000,
+        "value": 1200000
+      },
+      "quantity": 2000000
+    },
+    {
+      "ask": {
+        "average": 375001,
+        "complete": true,
+        "filled": 4000000,
+        "value": 1500004
+      },
+      "bid": {
+        "average": 575000,
+        "complete": true,
+        "filled": 4000000,
+        "value": 2300000
+      },
+      "quantity": 4000000
+    },
+    {
+      "ask": {
+        "average": 415001,
+        "complete": false,
+        "filled": 10000000,
+        "value": 4150010
+      },
+      "bid": {
+        "average": 535000,
+        "complete": false,
+        "filled": 10000000,
+        "value": 5350000
+      },
+      "quantity": 11000000
+    }
+  ],
+  "debt": [
+    {
+      "assets_up": 1,
+      "index": 1000000000000000000,
+      "shares": 1
+    },
+    {
+      "assets_up": 2,
+      "index": 1000000000000000001,
+      "shares": 1
+    },
+    {
+      "assets_up": 1075000,
+      "index": 1075000000000000000,
+      "shares": 1000000
+    }
+  ],
+  "interest": [
+    {
+      "elapsed": 31536000,
+      "index": 1000000000000000000,
+      "next": 1000000000000000000,
+      "rate": 0
+    },
+    {
+      "elapsed": 1,
+      "index": 1000000000000000000,
+      "next": 1000000001585489600,
+      "rate": 50000000000000000
+    },
+    {
+      "elapsed": 31536000,
+      "index": 1000000000000000000,
+      "next": 1050000000000000000,
+      "rate": 50000000000000000
+    },
+    {
+      "elapsed": 315360000,
+      "index": 1234567890123456789,
+      "next": 25925925692592592569,
+      "rate": 2000000000000000000
+    }
+  ],
+  "leverage": [
+    {
+      "equity": 0,
+      "leverage_bps": 10000,
+      "target_debt": 0
+    },
+    {
+      "equity": 1,
+      "leverage_bps": 15000,
+      "target_debt": 0
+    },
+    {
+      "equity": 1000001,
+      "leverage_bps": 20000,
+      "target_debt": 1000001
+    },
+    {
+      "equity": 1000000000000000000,
+      "leverage_bps": 50000,
+      "target_debt": 4000000000000000000
+    }
+  ],
+  "liquidation": [
+    {
+      "available": 1000000000000000000,
+      "bonus": 0,
+      "debt": 1,
+      "price": 600000,
+      "seized": 2
+    },
+    {
+      "available": 1000000000000000000,
+      "bonus": 1000,
+      "debt": 1000000,
+      "price": 600000,
+      "seized": 1833334
+    },
+    {
+      "available": 2000000,
+      "bonus": 1000,
+      "debt": 1000001,
+      "price": 333333,
+      "seized": 2000000
+    }
+  ],
+  "maintenance": [
+    {
+      "current": 7500,
+      "remaining": 3601
+    },
+    {
+      "current": 7500,
+      "remaining": 3600
+    },
+    {
+      "current": 3750,
+      "remaining": 1800
+    },
+    {
+      "current": 2,
+      "remaining": 1
+    },
+    {
+      "current": 0,
+      "remaining": 0
+    }
+  ],
+  "normalization": [
+    {
+      "amount": 1,
+      "down": 0,
+      "from": 18,
+      "to": 6,
+      "up": 1
+    },
+    {
+      "amount": 999999999999,
+      "down": 0,
+      "from": 18,
+      "to": 6,
+      "up": 1
+    },
+    {
+      "amount": 1000000000000,
+      "down": 1,
+      "from": 18,
+      "to": 6,
+      "up": 1
+    },
+    {
+      "amount": 1234567,
+      "down": 1234567000000000000,
+      "from": 6,
+      "to": 18,
+      "up": 1234567000000000000
+    },
+    {
+      "amount": 1000000000000000000,
+      "down": 1000000,
+      "from": 18,
+      "to": 6,
+      "up": 1000000
+    }
+  ],
+  "payout": [
+    {
+      "denominator": 1,
+      "fee": 0,
+      "net": 1000000,
+      "numerator": 1,
+      "shares": 1000000
+    },
+    {
+      "denominator": 2,
+      "fee": 0,
+      "net": 500000,
+      "numerator": 1,
+      "shares": 1000000
+    },
+    {
+      "denominator": 2,
+      "fee": 125,
+      "net": 493750,
+      "numerator": 1,
+      "shares": 1000001
+    },
+    {
+      "denominator": 2,
+      "fee": 9999,
+      "net": 0,
+      "numerator": 1,
+      "shares": 1
+    }
+  ],
+  "vault": [
+    {
+      "amount": 1,
+      "assets": 0,
+      "assets_down": 0,
+      "assets_up": 1,
+      "shares_down": 1000000,
+      "shares_up": 1000000,
+      "supply": 0,
+      "virtual_assets": 1,
+      "virtual_shares": 1000000
+    },
+    {
+      "amount": 7,
+      "assets": 13,
+      "assets_down": 8,
+      "assets_up": 9,
+      "shares_down": 6,
+      "shares_up": 6,
+      "supply": 11,
+      "virtual_assets": 1,
+      "virtual_shares": 1
+    },
+    {
+      "amount": 1000000000000000000,
+      "assets": 5000000000000000000,
+      "assets_down": 1249999999999687500,
+      "assets_up": 1249999999999687501,
+      "shares_down": 800000000000199999,
+      "shares_up": 800000000000200000,
+      "supply": 4000000000000000000,
+      "virtual_assets": 1,
+      "virtual_shares": 1000000
+    }
+  ]
+}

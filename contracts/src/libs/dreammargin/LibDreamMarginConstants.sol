@@ -22,6 +22,9 @@ library LibDreamMarginConstants {
   /// @notice Number of nanoseconds in one second.
   uint256 internal constant NS_PER_SECOND = 1e9;
 
+  /// @notice Fixed year length used by the simple testnet financing index.
+  uint256 internal constant SECONDS_PER_YEAR = 365 days;
+
   // -------------------------------------------------------------------------
   // Sentinels and structural bounds
   // -------------------------------------------------------------------------

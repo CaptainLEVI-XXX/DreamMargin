@@ -14,6 +14,15 @@ library LibDreamMarginErrors {
   /// @param amount Offending zero amount.
   error ZeroAmount(uint256 amount);
 
+  /// @notice Raised when a mathematical denominator or grid is zero.
+  /// @param field Identifier of the zero denominator.
+  error ZeroDenominator(bytes32 field);
+
+  /// @notice Raised when venue quantization removes an otherwise nonzero action.
+  /// @param requested Nonzero value before quantization.
+  /// @param quantum Tick or lot increment applied.
+  error QuantizedToZero(uint256 requested, uint256 quantum);
+
   /// @notice Raised when a caller lacks a required role bit.
   /// @param account Unauthorized caller.
   /// @param requiredRole Required role bit.
