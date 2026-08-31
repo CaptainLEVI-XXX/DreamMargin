@@ -23,11 +23,19 @@ contract DreamMarginControllerHarness is DreamMarginController {
     address oracle_,
     address feeRecipient_,
     address positionOpenFacet_,
+    address positionCloseFacet_,
     InitialRoles memory initialRoles,
     GlobalRiskConfig memory globalRisk
   )
     DreamMarginController(
-      module_, vault_, oracle_, feeRecipient_, positionOpenFacet_, initialRoles, globalRisk
+      module_,
+      vault_,
+      oracle_,
+      feeRecipient_,
+      positionOpenFacet_,
+      positionCloseFacet_,
+      initialRoles,
+      globalRisk
     )
   {}
 
@@ -60,26 +68,6 @@ contract DreamMarginControllerHarness is DreamMarginController {
     outcomeDebtShares = self.outcomeDebtShares[generationKey];
     marketDebtShares = self.marketDebtShares[marketGroup];
     totalDebtShares = self.totalDebtShares;
-  }
-
-  /// @inheritdoc IDreamMarginController
-  function repay(uint256, uint256) external pure override returns (uint256) {
-    revert LibDreamMarginErrors.ActionBlocked(0, this.repay.selector);
-  }
-
-  /// @inheritdoc IDreamMarginController
-  function withdrawCollateral(uint256, uint256) external pure override {
-    revert LibDreamMarginErrors.ActionBlocked(0, this.withdrawCollateral.selector);
-  }
-
-  /// @inheritdoc IDreamMarginController
-  function deleverage(DeleverageParams calldata) external pure override returns (uint256, uint256) {
-    revert LibDreamMarginErrors.ActionBlocked(0, this.deleverage.selector);
-  }
-
-  /// @inheritdoc IDreamMarginController
-  function close(CloseParams calldata) external pure override returns (uint256, uint256) {
-    revert LibDreamMarginErrors.ActionBlocked(0, this.close.selector);
   }
 
   /// @inheritdoc IDreamMarginController

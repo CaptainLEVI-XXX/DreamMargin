@@ -48,6 +48,9 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
   /// @notice Immutable opening lifecycle facet reached only by its two explicit wrappers.
   address private immutable _POSITION_OPEN_FACET;
 
+  /// @notice Immutable ordinary-reduction facet reached only by its four explicit wrappers.
+  address private immutable _POSITION_CLOSE_FACET;
+
   /// @notice Initial separated administrative accounts.
   /// @param governance Account scheduling high-impact delayed changes.
   /// @param riskSteward Account assigned bounded risk-steward authority.
@@ -66,6 +69,7 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
   /// @param oracle_ Mark oracle whose configurator and module must match this deployment.
   /// @param feeRecipient_ Immutable fee destination.
   /// @param positionOpenFacet_ Predeployed immutable opening facet.
+  /// @param positionCloseFacet_ Predeployed immutable ordinary-reduction facet.
   /// @param initialRoles Separated initial administrative accounts.
   /// @param globalRisk Initial global debt, loss, utilization, and delay bounds.
   constructor(
@@ -74,6 +78,7 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
     address oracle_,
     address feeRecipient_,
     address positionOpenFacet_,
+    address positionCloseFacet_,
     InitialRoles memory initialRoles,
     GlobalRiskConfig memory globalRisk
   ) {
@@ -85,6 +90,9 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
     }
     if (positionOpenFacet_ == address(0)) {
       revert LibDreamMarginErrors.ZeroAddress("POSITION_OPEN_FACET");
+    }
+    if (positionCloseFacet_ == address(0)) {
+      revert LibDreamMarginErrors.ZeroAddress("POSITION_CLOSE_FACET");
     }
     _nonzero(initialRoles.governance, "GOVERNANCE");
     _nonzero(initialRoles.riskSteward, "RISK_STEWARD");
@@ -116,12 +124,16 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
     if (positionOpenFacet_.code.length == 0) {
       revert LibDreamMarginErrors.InvalidFacet(positionOpenFacet_);
     }
+    if (positionCloseFacet_.code.length == 0) {
+      revert LibDreamMarginErrors.InvalidFacet(positionCloseFacet_);
+    }
 
     _MODULE = module_;
     _VAULT = vault_;
     _ORACLE = oracle_;
     _FEE_RECIPIENT = feeRecipient_;
     _POSITION_OPEN_FACET = positionOpenFacet_;
+    _POSITION_CLOSE_FACET = positionCloseFacet_;
 
     LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
     self.globalRisk = globalRisk;
@@ -161,13 +173,38 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
   }
 
   /// @inheritdoc IDreamMarginController
+  function positionCloseFacet() external view returns (address facet) {
+    facet = _POSITION_CLOSE_FACET;
+  }
+
+  /// @inheritdoc IDreamMarginController
   function openPosition(OpenParams calldata) external returns (uint256, uint256, uint256) {
-    _delegatePositionOpen();
+    _delegateLifecycle(_POSITION_OPEN_FACET);
   }
 
   /// @inheritdoc IDreamMarginController
   function addCollateral(uint256, uint256) external {
-    _delegatePositionOpen();
+    _delegateLifecycle(_POSITION_OPEN_FACET);
+  }
+
+  /// @inheritdoc IDreamMarginController
+  function repay(uint256, uint256) external returns (uint256) {
+    _delegateLifecycle(_POSITION_CLOSE_FACET);
+  }
+
+  /// @inheritdoc IDreamMarginController
+  function withdrawCollateral(uint256, uint256) external {
+    _delegateLifecycle(_POSITION_CLOSE_FACET);
+  }
+
+  /// @inheritdoc IDreamMarginController
+  function deleverage(DeleverageParams calldata) external returns (uint256, uint256) {
+    _delegateLifecycle(_POSITION_CLOSE_FACET);
+  }
+
+  /// @inheritdoc IDreamMarginController
+  function close(CloseParams calldata) external returns (uint256, uint256) {
+    _delegateLifecycle(_POSITION_CLOSE_FACET);
   }
 
   /// @inheritdoc IDreamMarginController
@@ -426,6 +463,9 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
         "OPENING_CUTOFF", risk.openingCutoff, risk.reduceOnlyCutoff
       );
     }
+    if (risk.compressionWindow == 0) {
+      revert LibDreamMarginErrors.ZeroAmount(risk.compressionWindow);
+    }
     if (
       risk.maxBookLevels == 0 || risk.maxBookLevels > LibDreamMarginConstants.MAX_BOOK_LEVELS
         || risk.maxBookLevels != oracleBookLevels
@@ -524,16 +564,16 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
     timestamp = uint40(value);
   }
 
-  /// @notice Delegates the exact opening selector to the immutable opening facet and returns bytes.
+  /// @notice Delegates one exact lifecycle selector to its immutable facet and returns bytes.
   /// @dev Memory layout: `pointer` references temporary calldata, then ABI return bytes.
   ///      1. Copy the complete validated Solidity entrypoint calldata into free memory.
-  ///      2. Delegate only to the constructor-created immutable opening facet.
+  ///      2. Delegate only to the wrapper-selected immutable lifecycle facet.
   ///      3. Copy return data over the temporary region and bubble success or revert exactly.
-  ///      Safety Considerations: THE TARGET IS IMMUTABLE AND NOT CALLER-CONTROLLED; THE TWO
-  ///      CALLERS OF THIS HELPER EXPOSE ONLY OPENING SELECTORS; FREE MEMORY IS ADVANCED BEFORE
-  ///      RETURNING SO THE BLOCK DOES NOT ALIAS LIVE SOLIDITY MEMORY.
-  function _delegatePositionOpen() private {
-    address target = _POSITION_OPEN_FACET;
+  ///      Safety Considerations: EVERY TARGET ARGUMENT IS LOADED FROM A CONSTRUCTOR-SET
+  ///      IMMUTABLE AND NOT CALLER-CONTROLLED; CALLERS EXPOSE ONLY DECLARED INTERFACE SELECTORS;
+  ///      FREE MEMORY IS ADVANCED BEFORE RETURNING SO NO LIVE SOLIDITY MEMORY IS ALIASED.
+  /// @param target Wrapper-selected immutable lifecycle facet.
+  function _delegateLifecycle(address target) private {
     assembly ("memory-safe") {
       let pointer := mload(0x40)
       calldatacopy(pointer, 0, calldatasize())

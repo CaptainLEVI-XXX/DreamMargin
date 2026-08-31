@@ -240,6 +240,16 @@ library LibDreamMarginErrors {
   /// @param maximumShares Maximum admitted shares derived from oracle depth.
   error PositionDepthExceeded(uint256 resultingShares, uint256 maximumShares);
 
+  /// @notice Raised when a position action requests more attributed outcome shares than available.
+  /// @param available Position shares before the action.
+  /// @param required Shares requested by the action.
+  error InsufficientPositionShares(uint256 available, uint256 required);
+
+  /// @notice Raised when an attempted close leaves debt shares or outcome collateral behind.
+  /// @param remainingShares Outcome shares left after attempted execution.
+  /// @param remainingDebtShares Debt shares left after attempted repayment.
+  error IncompleteClose(uint256 remainingShares, uint256 remainingDebtShares);
+
   /// @notice Raised when conservative collateral value does not support required health.
   /// @param value Conservative collateral value in raw collateral units.
   /// @param requiredValue Required value in raw collateral units.

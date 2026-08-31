@@ -77,6 +77,10 @@ interface IDreamMarginController {
   /// @return facet Predeployed facet reached only by opening selectors.
   function positionOpenFacet() external view returns (address facet);
 
+  /// @notice Returns the immutable ordinary position-reduction lifecycle facet.
+  /// @return facet Predeployed facet reached only by repayment and owner-exit selectors.
+  function positionCloseFacet() external view returns (address facet);
+
   /// @notice Returns an account's complete role bitmap.
   /// @param account Account queried.
   /// @return roles Assigned role bits.
@@ -245,6 +249,12 @@ interface IDreamMarginController {
   /// @param owner Account supplying the exact recorded outcome ID.
   /// @param shares Outcome shares added.
   event CollateralAdded(uint256 indexed positionId, address indexed owner, uint256 shares);
+
+  /// @notice Emitted when an owner safely withdraws attributed outcome collateral.
+  /// @param positionId Position whose attributed collateral decreased.
+  /// @param owner Position owner receiving the exact outcome ID.
+  /// @param shares Outcome shares withdrawn.
+  event CollateralWithdrawn(uint256 indexed positionId, address indexed owner, uint256 shares);
 
   /// @notice Emitted after collateral repayment retires debt shares.
   /// @param positionId Position whose debt decreased.

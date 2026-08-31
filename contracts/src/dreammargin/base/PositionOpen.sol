@@ -391,7 +391,21 @@ contract PositionOpen is DreamDexAdapter {
     uint256 leverageCeiling = requestedLeverage < config.risk.maxLeverageBps
       ? requestedLeverage
       : config.risk.maxLeverageBps;
-    if (health.equity < initialEquity || health.leverageBps > leverageCeiling) {
+    // A borrow rounds debt shares up and their current asset value up again. Permit at most the
+    // asset value of one debt-share quantum in owner-equity and nominal-leverage comparisons;
+    // the independent initial-LTV check above remains strictly conservative.
+    uint256 debtQuantum = FixedPointMathLib.fullMulDivUp(
+      IDreamMarginVault(_vaultAddress()).debtIndexWad(), 1, LibDreamMarginConstants.WAD
+    );
+    uint256 minimumLeverageEquity =
+      FixedPointMathLib.fullMulDivUp(grossValue, LibDreamMarginConstants.BPS, leverageCeiling);
+    uint256 maximumLeverageDebt =
+      grossValue > minimumLeverageEquity ? grossValue - minimumLeverageEquity : 0;
+    bool lostInitialEquity =
+      health.equity < initialEquity && initialEquity - health.equity > debtQuantum;
+    bool exceededLeverage =
+      debtAssets > maximumLeverageDebt && debtAssets - maximumLeverageDebt > debtQuantum;
+    if (lostInitialEquity || exceededLeverage) {
       revert LibDreamMarginErrors.InsufficientHealth(grossValue, debtAssets + initialEquity);
     }
   }

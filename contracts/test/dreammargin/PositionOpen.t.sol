@@ -7,6 +7,7 @@ pragma solidity 0.8.34;
 /// @dev Each test uses complete vault, oracle, controller, and DreamDEX integration models.
 
 import {DreamMarginController} from "src/dreammargin/DreamMarginController.sol";
+import {PositionClose} from "src/dreammargin/base/PositionClose.sol";
 import {PositionOpen} from "src/dreammargin/base/PositionOpen.sol";
 import {IDreamMarginController} from "src/interfaces/dreammargin/IDreamMarginController.sol";
 import {IDreamDexBinaryPool} from "src/interfaces/integrations/IDreamDexBinaryPool.sol";
@@ -67,6 +68,7 @@ contract PositionOpenTest is Test {
   DreamMarginVault private _vault;
   DreamDexMarkOracle private _oracle;
   PositionOpen private _positionOpen;
+  PositionClose private _positionClose;
   DreamMarginControllerHarness private _controller;
   MarketKey private _yesKey;
   MarketKey private _noKey;
@@ -89,6 +91,7 @@ contract PositionOpenTest is Test {
     _module.setMarket(_MARKET_ID, 1, _moduleMarket());
     _setBook();
     _positionOpen = new PositionOpen();
+    _positionClose = new PositionClose();
 
     uint256 nextNonce = vm.getNonce(address(this));
     address predictedController = vm.computeCreateAddress(address(this), nextNonce + 2);
@@ -100,6 +103,7 @@ contract PositionOpenTest is Test {
       address(_oracle),
       _FEE_RECIPIENT,
       address(_positionOpen),
+      address(_positionClose),
       _initialRoles(),
       _globalRisk()
     );

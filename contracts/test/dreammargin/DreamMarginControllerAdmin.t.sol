@@ -7,6 +7,7 @@ pragma solidity 0.8.34;
 /// @dev Named risk values are conservative test fixtures, not production parameters.
 
 import {DreamMarginController} from "src/dreammargin/DreamMarginController.sol";
+import {PositionClose} from "src/dreammargin/base/PositionClose.sol";
 import {PositionOpen} from "src/dreammargin/base/PositionOpen.sol";
 import {IDreamDexMarkOracle} from "src/interfaces/dreammargin/IDreamDexMarkOracle.sol";
 import {IDreamMarginController} from "src/interfaces/dreammargin/IDreamMarginController.sol";
@@ -60,6 +61,7 @@ contract DreamMarginControllerAdminTest is Test {
   DreamMarginVault private _vault;
   DreamDexMarkOracle private _oracle;
   PositionOpen private _positionOpen;
+  PositionClose private _positionClose;
   DreamMarginControllerHarness private _controller;
   MarketKey private _key;
   bytes32 private _generationKey;
@@ -80,6 +82,7 @@ contract DreamMarginControllerAdminTest is Test {
     _module.setMarket(_MARKET_ID, 1, _moduleMarket());
     _setBook();
     _positionOpen = new PositionOpen();
+    _positionClose = new PositionClose();
 
     uint256 nextNonce = vm.getNonce(address(this));
     address predictedController = vm.computeCreateAddress(address(this), nextNonce + 2);
@@ -91,6 +94,7 @@ contract DreamMarginControllerAdminTest is Test {
       address(_oracle),
       _FEE_RECIPIENT,
       address(_positionOpen),
+      address(_positionClose),
       _initialRoles(),
       _globalRisk()
     );
@@ -160,6 +164,20 @@ contract DreamMarginControllerAdminTest is Test {
       )
     );
     _controller.scheduleChange(keccak256("generic"), keccak256("payload"));
+  }
+
+  /// @notice Rejects a zero expiry-compression window before unsafe health math is admitted.
+  function test_generationRejectsZeroCompressionWindow() external {
+    GenerationConfig memory generation = _generationConfig();
+    generation.risk.compressionWindow = 0;
+    OracleConfig memory oracleConfig = _oracleConfig();
+    bytes32 changeId = keccak256("zero-compression-window");
+    vm.prank(_RISK_STEWARD);
+    _controller.scheduleGenerationChange(changeId, _generationKey, generation, oracleConfig);
+    vm.warp(_START + 1 days);
+
+    vm.expectRevert(abi.encodeWithSelector(LibDreamMarginErrors.ZeroAmount.selector, 0));
+    _controller.executeGenerationChange(changeId, _generationKey, generation, oracleConfig);
   }
 
   /// @notice Enforces exact payload commitment and the full governance delay boundary.
