@@ -215,14 +215,14 @@ contract DreamMarginStorageHarness {
   /// @param account Share owner.
   /// @param spender Approved share spender.
   /// @param values Balance, allowance, supply, cash, debt, interest, debt shares, index,
-  ///        locked reserve, protocol reserve, fees, realized loss, and recovery respectively.
+  ///        locked reserve, protocol reserve, fees, realized loss, recovery, and reserve shares.
   /// @param lastAccrual Last financing accrual timestamp.
   /// @param reentrancyStatus Reentrancy-guard state.
   /// @param initialized Initialization state.
   function writeVault(
     address account,
     address spender,
-    uint256[13] calldata values,
+    uint256[14] calldata values,
     uint40 lastAccrual,
     uint8 reentrancyStatus,
     bool initialized
@@ -241,6 +241,7 @@ contract DreamMarginStorageHarness {
     self.accruedProtocolFees = values[10];
     self.realizedBadDebt = values[11];
     self.recoveredBadDebt = values[12];
+    self.protocolReserveShares = values[13];
     self.lastAccrual = lastAccrual;
     self.reentrancyStatus = reentrancyStatus;
     self.initialized = initialized;
@@ -250,7 +251,7 @@ contract DreamMarginStorageHarness {
   /// @param account Share owner.
   /// @param spender Approved share spender.
   /// @return values Balance, allowance, supply, cash, debt, interest, debt shares, index,
-  ///         locked reserve, protocol reserve, fees, realized loss, and recovery respectively.
+  ///         locked reserve, protocol reserve, fees, realized loss, recovery, and reserve shares.
   /// @return lastAccrual Last financing accrual timestamp.
   /// @return reentrancyStatus Reentrancy-guard state.
   /// @return initialized Initialization state.
@@ -258,7 +259,7 @@ contract DreamMarginStorageHarness {
     external
     view
     returns (
-      uint256[13] memory values,
+      uint256[14] memory values,
       uint40 lastAccrual,
       uint8 reentrancyStatus,
       bool initialized
@@ -278,6 +279,7 @@ contract DreamMarginStorageHarness {
     values[10] = self.accruedProtocolFees;
     values[11] = self.realizedBadDebt;
     values[12] = self.recoveredBadDebt;
+    values[13] = self.protocolReserveShares;
     lastAccrual = self.lastAccrual;
     reentrancyStatus = self.reentrancyStatus;
     initialized = self.initialized;

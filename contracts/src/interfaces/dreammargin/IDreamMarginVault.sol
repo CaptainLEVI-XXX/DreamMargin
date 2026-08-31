@@ -6,6 +6,71 @@ pragma solidity 0.8.34;
 /// @notice Exposes cash-limited ERC-4626 behavior and controller-only debt accounting.
 /// @dev Asset values use collateral native units; debt conversions round in favor of the vault.
 interface IDreamMarginVault {
+  /// @notice Emitted when vault shares move between accounts.
+  /// @param sender Account whose share balance decreased, or zero on mint.
+  /// @param receiver Account whose share balance increased, or zero on burn.
+  /// @param shares Shares moved.
+  event Transfer(address indexed sender, address indexed receiver, uint256 shares);
+
+  /// @notice Emitted when a share owner changes an allowance.
+  /// @param owner Account granting the allowance.
+  /// @param spender Account receiving the allowance.
+  /// @param shares New allowance.
+  event Approval(address indexed owner, address indexed spender, uint256 shares);
+
+  /// @notice Emitted after an ERC-4626 deposit or mint.
+  /// @param caller Account supplying assets.
+  /// @param receiver Account receiving shares.
+  /// @param assets Assets received.
+  /// @param shares Shares minted.
+  event Deposit(address indexed caller, address indexed receiver, uint256 assets, uint256 shares);
+
+  /// @notice Emitted after an ERC-4626 withdrawal or redemption.
+  /// @param caller Account initiating the exit.
+  /// @param receiver Account receiving assets.
+  /// @param owner Account whose shares were burned.
+  /// @param assets Assets paid.
+  /// @param shares Shares burned.
+  event Withdraw(
+    address indexed caller,
+    address indexed receiver,
+    address indexed owner,
+    uint256 assets,
+    uint256 shares
+  );
+
+  /// @notice Emitted when the controller creates a performing receivable.
+  /// @param receiver Account receiving borrowed assets.
+  /// @param assets Assets lent.
+  /// @param debtShares Debt shares minted.
+  event Borrow(address indexed receiver, uint256 assets, uint256 debtShares);
+
+  /// @notice Emitted when controller repayment retires debt shares.
+  /// @param assets Assets received.
+  /// @param debtShares Debt shares retired.
+  event Repay(uint256 assets, uint256 debtShares);
+
+  /// @notice Emitted when the global financing index advances.
+  /// @param previousIndexWad Previous assets-per-debt-share index.
+  /// @param nextIndexWad New assets-per-debt-share index.
+  /// @param interestAccrued Newly collectible financing interest.
+  event InterestAccrued(uint256 previousIndexWad, uint256 nextIndexWad, uint256 interestAccrued);
+
+  /// @notice Emitted when first-loss reserve capital is funded.
+  /// @param assets Assets locked for first-loss use.
+  /// @param reserveShares Non-redeemable shares minted to the vault.
+  event ReserveFunded(uint256 assets, uint256 reserveShares);
+
+  /// @notice Emitted when a receivable is removed and reserve capital is consumed.
+  /// @param assetsWrittenOff Receivable removed.
+  /// @param reserveUsed Funded reserve applied.
+  /// @param reserveSharesBurned Non-redeemable shares burned.
+  event DebtWrittenOff(uint256 assetsWrittenOff, uint256 reserveUsed, uint256 reserveSharesBurned);
+
+  /// @notice Emitted when assets arrive after an earlier write-off.
+  /// @param assets Assets actually recovered.
+  event RecoveryRecorded(uint256 assets);
+
   // -------------------------------------------------------------------------
   // ERC-20 share interface
   // -------------------------------------------------------------------------
@@ -65,6 +130,14 @@ interface IDreamMarginVault {
   /// @notice Returns the collateral asset managed by the vault.
   /// @return asset_ Collateral token address.
   function asset() external view returns (address asset_);
+
+  /// @notice Returns the immutable credit-accounting controller.
+  /// @return controller_ Sole controller address.
+  function controller() external view returns (address controller_);
+
+  /// @notice Returns the immutable annual simple financing rate.
+  /// @return rateWad Annual rate in WAD.
+  function annualRateWad() external view returns (uint256 rateWad);
 
   /// @notice Returns cash plus performing debt and collectible interest.
   /// @return assets Reported assets in collateral native units.
@@ -156,6 +229,54 @@ interface IDreamMarginVault {
   /// @return assets Available collateral in asset native units.
   function availableLiquidity() external view returns (uint256 assets);
 
+  /// @notice Returns collateral tracked as internal cash, excluding direct donations.
+  /// @return assets Accounted cash in asset native units.
+  function internalCash() external view returns (uint256 assets);
+
+  /// @notice Returns collectible principal before projected interest.
+  /// @return assets Performing principal in asset native units.
+  function performingDebt() external view returns (uint256 assets);
+
+  /// @notice Returns stored collectible financing interest.
+  /// @return assets Stored interest in asset native units.
+  function collectibleInterest() external view returns (uint256 assets);
+
+  /// @notice Returns the current projected debt index.
+  /// @return indexWad Assets per debt share in WAD.
+  function debtIndexWad() external view returns (uint256 indexWad);
+
+  /// @notice Returns all outstanding controller debt shares.
+  /// @return shares Outstanding debt shares.
+  function totalDebtShares() external view returns (uint256 shares);
+
+  /// @notice Returns funded reserve assets locked from ordinary exits.
+  /// @return assets Funded reserve in asset native units.
+  function protocolReserve() external view returns (uint256 assets);
+
+  /// @notice Returns accounted cash unavailable to ordinary synchronous exits.
+  /// @return assets Locked cash in asset native units.
+  function lockedReserve() external view returns (uint256 assets);
+
+  /// @notice Returns non-redeemable shares representing funded reserve capital.
+  /// @return shares Reserve shares held by the vault itself.
+  function protocolReserveShares() external view returns (uint256 shares);
+
+  /// @notice Returns token balance not recognized by internal accounting.
+  /// @return assets Unaccounted direct donations in asset native units.
+  function unaccountedSurplus() external view returns (uint256 assets);
+
+  /// @notice Returns cumulative receivables removed as bad debt.
+  /// @return assets Cumulative bad debt in asset native units.
+  function realizedBadDebt() external view returns (uint256 assets);
+
+  /// @notice Returns cumulative post-write-off recoveries actually received.
+  /// @return assets Cumulative recovered assets.
+  function recoveredBadDebt() external view returns (uint256 assets);
+
+  /// @notice Advances the immutable simple financing-rate index to the current timestamp.
+  /// @return interestAccrued Newly stored collectible interest.
+  function accrueInterest() external returns (uint256 interestAccrued);
+
   /// @notice Converts debt shares to current assets with upward rounding.
   /// @param debtShares Debt shares converted.
   /// @return assets Current debt in collateral native units.
@@ -183,6 +304,11 @@ interface IDreamMarginVault {
   function writeOff(uint256 debtShares)
     external
     returns (uint256 assetsWrittenOff, uint256 reserveUsed);
+
+  /// @notice Pulls controller assets into the non-redeemable first-loss reserve.
+  /// @param assets Reserve assets transferred in asset native units.
+  /// @return reserveShares Non-redeemable shares minted to the vault itself.
+  function fundReserve(uint256 assets) external returns (uint256 reserveShares);
 
   /// @notice Records collateral actually recovered after an earlier write-off.
   /// @param assets Recovered collateral transferred in asset native units.

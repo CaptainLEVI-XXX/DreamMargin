@@ -213,6 +213,16 @@ library LibDreamMarginErrors {
   /// @param required Required share allowance.
   error InsufficientShareAllowance(uint256 available, uint256 required);
 
+  /// @notice Raised when a debt-share reduction exceeds total outstanding debt shares.
+  /// @param available Outstanding debt shares before the reduction.
+  /// @param required Debt shares requested for repayment or write-off.
+  error InsufficientDebtShares(uint256 available, uint256 required);
+
+  /// @notice Raised when exact debt repayment exceeds the controller's asset limit.
+  /// @param required Assets required to retire the requested debt shares.
+  /// @param maximum Maximum assets authorized by the controller.
+  error RepaymentLimitExceeded(uint256 required, uint256 maximum);
+
   /// @notice Raised when a non-controller attempts to mutate vault debt.
   /// @param caller Unauthorized caller.
   /// @param controller Authorized controller.

@@ -56,26 +56,32 @@ contract MockERC20 is IERC20Minimal {
   /// @notice Mints test collateral to an account.
   /// @param receiver Account receiving the minted collateral.
   /// @param amount Amount minted in raw collateral units.
-  function mint(address receiver, uint256 amount) external {
+  function mint(address receiver, uint256 amount) public virtual {
     totalSupply += amount;
     balanceOf[receiver] += amount;
   }
 
   /// @inheritdoc IERC20Minimal
-  function approve(address spender, uint256 amount) external override returns (bool success) {
+  function approve(address spender, uint256 amount) public virtual override returns (bool success) {
     allowance[msg.sender][spender] = amount;
     success = true;
   }
 
   /// @inheritdoc IERC20Minimal
-  function transfer(address receiver, uint256 amount) external override returns (bool success) {
+  function transfer(address receiver, uint256 amount)
+    public
+    virtual
+    override
+    returns (bool success)
+  {
     _transfer(msg.sender, receiver, amount);
     success = true;
   }
 
   /// @inheritdoc IERC20Minimal
   function transferFrom(address sender, address receiver, uint256 amount)
-    external
+    public
+    virtual
     override
     returns (bool success)
   {
@@ -93,7 +99,7 @@ contract MockERC20 is IERC20Minimal {
   /// @param sender Account whose balance decreases.
   /// @param receiver Account whose balance increases.
   /// @param amount Amount moved in raw collateral units.
-  function _transfer(address sender, address receiver, uint256 amount) internal {
+  function _transfer(address sender, address receiver, uint256 amount) internal virtual {
     uint256 available = balanceOf[sender];
     if (available < amount) revert MockERC20InsufficientBalance(available, amount);
 

@@ -31,6 +31,7 @@ library LibDreamMarginVaultStorage {
   /// @param accruedProtocolFees Earned and collectible protocol fees, in asset native units.
   /// @param realizedBadDebt Cumulative written-off receivables, never subtracted twice.
   /// @param recoveredBadDebt Cumulative assets actually recovered after write-off.
+  /// @param protocolReserveShares Non-redeemable shares representing funded first-loss capital.
   /// @param lastAccrual Last financing-index accrual timestamp in seconds.
   /// @param reentrancyStatus Current reentrancy-guard state.
   /// @param initialized Whether vault initialization has completed.
@@ -48,6 +49,7 @@ library LibDreamMarginVaultStorage {
     uint256 accruedProtocolFees;
     uint256 realizedBadDebt;
     uint256 recoveredBadDebt;
+    uint256 protocolReserveShares;
     uint40 lastAccrual;
     uint8 reentrancyStatus;
     bool initialized;

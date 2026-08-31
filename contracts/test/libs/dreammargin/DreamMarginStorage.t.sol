@@ -60,7 +60,7 @@ contract DreamMarginStorageTest is Test {
       globalRisk, 11, 12, 13, 14, 15, ProtocolMode.REDUCE_ONLY, 2, true
     );
 
-    uint256[13] memory vaultValues;
+    uint256[14] memory vaultValues;
     vaultValues[0] = 101;
     _harness.writeVault(address(0xA1), address(0xB2), vaultValues, 102, 1, true);
 
@@ -93,7 +93,7 @@ contract DreamMarginStorageTest is Test {
       bool controllerInitialized
     ) = _harness.readControllerScalars();
     (
-      uint256[13] memory storedVaultValues,
+      uint256[14] memory storedVaultValues,
       uint40 vaultAccrual,
       uint8 vaultGuard,
       bool vaultInitialized
@@ -253,7 +253,7 @@ contract DreamMarginStorageTest is Test {
 
   /// @notice Persists every vault mapping and accounting scalar through its namespace.
   function test_vaultStateFieldsRoundTrip() external {
-    uint256[13] memory values;
+    uint256[14] memory values;
     for (uint256 i = 0; i < values.length; ++i) {
       values[i] = i + 1;
     }
@@ -263,7 +263,7 @@ contract DreamMarginStorageTest is Test {
     );
 
     (
-      uint256[13] memory storedValues,
+      uint256[14] memory storedValues,
       uint40 lastAccrual,
       uint8 reentrancyStatus,
       bool initialized
