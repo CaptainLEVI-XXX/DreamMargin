@@ -54,6 +54,12 @@ library LibDreamMarginErrors {
   /// @param actualKey Key derived from the supplied generation.
   error GenerationMismatch(bytes32 expectedKey, bytes32 actualKey);
 
+  /// @notice Raised when a deployed integration field differs from its pinned value.
+  /// @param field Identifier of the integration field.
+  /// @param expected Expected value encoded as one word.
+  /// @param actual Value returned by the deployed integration.
+  error IntegrationValueMismatch(bytes32 field, bytes32 expected, bytes32 actual);
+
   /// @notice Raised when a market generation is not enabled for new risk.
   /// @param generationKey Disabled or unknown generation key.
   error UnsupportedGeneration(bytes32 generationKey);
@@ -78,6 +84,11 @@ library LibDreamMarginErrors {
   /// @param deadline Deadline in seconds.
   /// @param currentTime Current timestamp in seconds.
   error DeadlineExpired(uint256 deadline, uint256 currentTime);
+
+  /// @notice Raised when an order deadline exceeds the pool generation's expiry ceiling.
+  /// @param deadlineNs Requested order deadline in nanoseconds.
+  /// @param maximumNs Pool order-expiry ceiling in nanoseconds.
+  error OrderDeadlineExceeded(uint256 deadlineNs, uint256 maximumNs);
 
   /// @notice Raised when a value cannot be represented by a narrowed storage type.
   /// @param field Identifier of the bounded field.
@@ -138,6 +149,12 @@ library LibDreamMarginErrors {
   /// @param expected Nominal amount returned by the integration.
   /// @param actual Balance-derived amount.
   error BalanceDeltaMismatch(address asset, uint256 expected, uint256 actual);
+
+  /// @notice Raised when an exact-ID outcome-token approval reports failure.
+  /// @param token ERC-6909 outcome-token contract.
+  /// @param spender Pinned DreamDEX pool.
+  /// @param outcomeId Exact outcome ID whose approval failed.
+  error TokenApprovalFailed(address token, address spender, uint256 outcomeId);
 
   /// @notice Raised when an oracle generation lacks a mature observation window.
   /// @param generationKey Generation being valued.
