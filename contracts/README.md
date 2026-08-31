@@ -1,66 +1,96 @@
-## Foundry
+# DreamMargin Contracts
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+DreamMargin is an isolated credit layer for DreamDEX binary Event Contracts on
+Somnia. The contracts let a trader custody one exact outcome-token generation,
+borrow bounded vault liquidity, and atomically acquire more of that outcome.
 
-Foundry consists of:
+The current release target is the Shannon testnet. It is experimental and is
+not approved for production deposits.
 
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
-- **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
-- **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+## Toolchain
 
-## Documentation
+The repository pins:
 
-https://book.getfoundry.sh/
+- Foundry `1.8.1`;
+- Solidity `0.8.34`;
+- the Prague EVM target;
+- optimizer runs `200` with `via_ir = true`;
+- forge-std `1.16.2`; and
+- Solady `0.1.26`.
 
-## Usage
+Initialize dependencies from the repository root:
 
-### Build
-
-```shell
-$ forge build
+```sh
+git submodule update --init --recursive
 ```
 
-### Test
+Install and verify the expected Foundry release:
 
-```shell
-$ forge test
+```sh
+foundryup -v 1.8.1
+forge --version
 ```
 
-### Format
+## Local Verification
 
-```shell
-$ forge fmt
+The contract project has no CI/CD pipeline. Contributors run verification
+locally:
+
+```sh
+cd contracts
+forge fmt --check
+forge build --sizes
+forge lint
+forge test
+FOUNDRY_PROFILE=full forge test -vvv
+forge snapshot --check
 ```
 
-### Gas Snapshots
+The deterministic local suite never depends on a public RPC. Run deployed
+DreamDEX integration tests separately:
 
-```shell
-$ forge snapshot
+```sh
+FOUNDRY_PROFILE=fork forge test -vv
 ```
 
-### Anvil
+The public Shannon RPC is the default. Override it locally when necessary; do
+not commit provider credentials or deployment keys.
 
-```shell
-$ anvil
+## Repository Layout
+
+```text
+src/
+  dreammargin/          controller facade and lifecycle modules
+  vault/                isolated lender accounting
+  oracle/               bounded DreamDEX mark observations
+  adapters/             venue-specific execution
+  interfaces/           protocol and integration interfaces
+  libs/dreammargin/     constants, errors, storage, and risk math
+test/
+  dreammargin/          controller and lifecycle behavior
+  vault/                lender accounting
+  libs/                 pure and storage libraries
+  audit/                permanent security regressions
+  fork/                 pinned deployed integrations
+  invariant/            stateful protocol properties
+  mock/                 adversarial local integrations
+  reference/            independent differential fixtures
+script/                 deployment and rehearsal scripts
 ```
 
-### Deploy
+Use full internal import paths, two-space indentation, ERC-7201 namespaced
+storage, and direct namespaced custom errors. Every production change includes
+its direct unit and fuzz tests. Security properties receive numbered stateful
+invariants, and every fixed bug receives a permanent regression test.
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+## Contribution Rules
+
+Enable the local hooks once per clone:
+
+```sh
+git config core.hooksPath .githooks
 ```
 
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+Keep commits single-author and independently buildable. One commit changes one
+production responsibility and its direct tests; do not squash a reviewable
+implementation sequence into one large commit.
