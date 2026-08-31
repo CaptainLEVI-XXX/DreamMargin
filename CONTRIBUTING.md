@@ -104,8 +104,16 @@ Allowed types are `feat`, `fix`, `test`, `docs`, `refactor`, `perf`, `chore`,
   other co-author trailers.
 - Do not use `git commit --author` or bypass repository hooks with
   `--no-verify`.
-- Keep one logical change in each commit. If a summary needs “and,” consider
-  splitting the commit.
+- Keep one logical change in each commit. If a summary needs “and,” split the
+  commit.
+- A commit should change one production responsibility and its direct tests.
+  Do not combine two lifecycle modules, repository setup with protocol logic,
+  or an unrelated refactor with a feature.
+- Keep the reviewable commit sequence when pushing a branch. Do not squash a
+  multi-phase implementation into one large commit.
+- Every commit must format, compile, and pass its relevant local tests on its
+  own. Put large generated fixtures in an isolated test-only commit with their
+  generator and provenance.
 
 Examples:
 
