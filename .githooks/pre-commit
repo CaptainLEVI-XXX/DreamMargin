@@ -1,0 +1,13 @@
+#!/bin/sh
+
+set -eu
+
+repository_root=$(git rev-parse --show-toplevel)
+
+if ! git diff --cached --name-only --diff-filter=ACMR | grep -Eq '^contracts/.*\.sol$'; then
+  exit 0
+fi
+
+cd "$repository_root/contracts"
+forge fmt --check
+forge build

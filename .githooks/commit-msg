@@ -1,0 +1,56 @@
+#!/bin/sh
+
+set -eu
+
+message_file=$1
+summary=$(sed -n '1p' "$message_file")
+
+if ! printf '%s\n' "$summary" | grep -Eq '^(feat|fix|test|docs|refactor|perf|chore|audit|ci)(\([a-z0-9][a-z0-9-]*\))?!?: [a-z0-9].+$'; then
+  echo "commit-msg: use Conventional Commits with an allowed type" >&2
+  exit 1
+fi
+
+if [ "$(printf '%s' "$summary" | wc -c | tr -d ' ')" -gt 72 ]; then
+  echo "commit-msg: summary must be at most 72 characters" >&2
+  exit 1
+fi
+
+case "$summary" in
+  *.)
+    echo "commit-msg: summary must not end with a period" >&2
+    exit 1
+    ;;
+esac
+
+if [ "$(sed -n '$=' "$message_file")" -gt 1 ] && [ -n "$(sed -n '2p' "$message_file")" ]; then
+  echo "commit-msg: leave a blank line after the summary" >&2
+  exit 1
+fi
+
+if awk 'length($0) > 72 && $0 !~ /^https?:\/\// { exit 1 }' "$message_file"; then
+  :
+else
+  echo "commit-msg: wrap message lines at 72 characters" >&2
+  exit 1
+fi
+
+if grep -Eiq '^[[:space:]]*(co-authored-by|signed-off-by):' "$message_file"; then
+  echo "commit-msg: commits must be single-author without author trailers" >&2
+  exit 1
+fi
+
+configured_name=$(git config --get user.name || true)
+configured_email=$(git config --get user.email || true)
+author_ident=$(git var GIT_AUTHOR_IDENT)
+author_name=$(printf '%s\n' "$author_ident" | sed -E 's/^(.*) <[^>]+> [0-9]+ [+-][0-9]{4}$/\1/')
+author_email=$(printf '%s\n' "$author_ident" | sed -E 's/^.* <([^>]+)> [0-9]+ [+-][0-9]{4}$/\1/')
+
+if [ -z "$configured_name" ] || [ -z "$configured_email" ]; then
+  echo "commit-msg: configure git user.name and user.email" >&2
+  exit 1
+fi
+
+if [ "$author_name" != "$configured_name" ] || [ "$author_email" != "$configured_email" ]; then
+  echo "commit-msg: commit author must match the configured git identity" >&2
+  exit 1
+fi
