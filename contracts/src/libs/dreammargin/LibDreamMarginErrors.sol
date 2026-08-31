@@ -273,4 +273,18 @@ library LibDreamMarginErrors {
   /// @notice Raised when a delayed change identifier has no pending record.
   /// @param changeId Missing change identifier.
   error ChangeNotScheduled(bytes32 changeId);
+
+  /// @notice Raised when a pending delayed-change identifier is reused.
+  /// @param changeId Existing pending identifier.
+  error ChangeAlreadyScheduled(bytes32 changeId);
+
+  /// @notice Raised when supplied delayed-change calldata does not match its commitment.
+  /// @param expectedHash Hash committed when the change was scheduled.
+  /// @param actualHash Hash of the supplied execution payload.
+  error ChangePayloadMismatch(bytes32 expectedHash, bytes32 actualHash);
+
+  /// @notice Raised when an emergency actor attempts to loosen protocol restrictions.
+  /// @param currentMode Current protocol mode.
+  /// @param requestedMode Requested less-restrictive mode.
+  error UnsafeModeTransition(uint8 currentMode, uint8 requestedMode);
 }

@@ -8,12 +8,136 @@ pragma solidity 0.8.34;
 
 import {
   GenerationConfig,
+  GlobalRiskConfig,
   MarketKey,
   Position,
   ProtocolMode
 } from "src/libs/dreammargin/LibDreamMarginStorage.sol";
+import {OracleConfig} from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.sol";
 
 interface IDreamMarginController {
+  /// @notice Emitted whenever an account's complete role bitmap changes.
+  /// @param account Account whose roles changed.
+  /// @param previousRoles Previous role bitmap.
+  /// @param newRoles Replacement role bitmap.
+  event RolesUpdated(address indexed account, uint256 previousRoles, uint256 newRoles);
+
+  /// @notice Emitted when the protocol enters a new operating mode.
+  /// @param previousMode Mode before the transition.
+  /// @param newMode Mode after the transition.
+  /// @param caller Account initiating or executing the transition.
+  event ProtocolModeUpdated(
+    ProtocolMode indexed previousMode, ProtocolMode indexed newMode, address indexed caller
+  );
+
+  /// @notice Emitted when one exact generation is registered or replaced after delay.
+  /// @param generationKey Full generation identifier.
+  /// @param enabled Whether new positions are admitted.
+  /// @param frozen Whether emergency freeze is active.
+  event GenerationUpdated(bytes32 indexed generationKey, bool enabled, bool frozen);
+
+  /// @notice Emitted when an emergency actor freezes one generation.
+  /// @param generationKey Full generation identifier.
+  /// @param caller Guardian or governance caller.
+  event GenerationFrozen(bytes32 indexed generationKey, address indexed caller);
+
+  /// @notice Emitted when exact execution payload is committed for delayed execution.
+  /// @param changeId Caller-selected unique change identifier.
+  /// @param payloadHash Hash of the exact execution selector and arguments.
+  /// @param executableAt Earliest execution timestamp.
+  event ChangeScheduled(bytes32 indexed changeId, bytes32 indexed payloadHash, uint40 executableAt);
+
+  /// @notice Emitted when a pending delayed change is cancelled.
+  /// @param changeId Cancelled change identifier.
+  /// @param caller Governance or guardian caller.
+  event ChangeCancelled(bytes32 indexed changeId, address indexed caller);
+
+  /// @notice Emitted after a committed delayed change executes.
+  /// @param changeId Executed change identifier.
+  /// @param payloadHash Verified execution payload hash.
+  event ChangeExecuted(bytes32 indexed changeId, bytes32 indexed payloadHash);
+
+  /// @notice Returns the immutable DreamDEX module.
+  /// @return module_ Bound module address.
+  function module() external view returns (address module_);
+
+  /// @notice Returns the immutable collateral vault.
+  /// @return vault_ Bound vault address.
+  function vault() external view returns (address vault_);
+
+  /// @notice Returns the immutable mark oracle.
+  /// @return oracle_ Bound oracle address.
+  function oracle() external view returns (address oracle_);
+
+  /// @notice Returns the immutable protocol fee recipient.
+  /// @return recipient Fee recipient address.
+  function feeRecipient() external view returns (address recipient);
+
+  /// @notice Returns an account's complete role bitmap.
+  /// @param account Account queried.
+  /// @return roles Assigned role bits.
+  function rolesOf(address account) external view returns (uint256 roles);
+
+  /// @notice Returns the current global risk configuration.
+  /// @return config Current global bounds and delays.
+  function globalRiskConfig() external view returns (GlobalRiskConfig memory config);
+
+  /// @notice Commits an exact high-impact action for delayed execution.
+  /// @param changeId Unique pending change identifier.
+  /// @param payloadHash Hash of execution selector and arguments.
+  function scheduleChange(bytes32 changeId, bytes32 payloadHash) external;
+
+  /// @notice Schedules only a generation-policy change as risk steward or governance.
+  /// @param changeId Unique pending change identifier.
+  /// @param generationKey Full generation identifier.
+  /// @param config Proposed controller generation policy.
+  /// @param oracleConfig Proposed immutable first-registration oracle policy.
+  function scheduleGenerationChange(
+    bytes32 changeId,
+    bytes32 generationKey,
+    GenerationConfig calldata config,
+    OracleConfig calldata oracleConfig
+  ) external;
+
+  /// @notice Cancels a pending delayed action as governance or guardian.
+  /// @param changeId Pending change identifier.
+  function cancelChange(bytes32 changeId) external;
+
+  /// @notice Applies a stricter emergency mode without delay.
+  /// @param mode New mode, which must be at least as restrictive as current mode.
+  function setEmergencyMode(ProtocolMode mode) external;
+
+  /// @notice Freezes new risk for one registered generation without delay.
+  /// @param generationKey Registered generation identifier.
+  function freezeGeneration(bytes32 generationKey) external;
+
+  /// @notice Executes a committed complete role-bitmap replacement.
+  /// @param changeId Scheduled change identifier.
+  /// @param account Account whose roles are replaced.
+  /// @param roles Replacement allowed role bitmap.
+  function executeRoleChange(bytes32 changeId, address account, uint256 roles) external;
+
+  /// @notice Executes a committed global-risk replacement.
+  /// @param changeId Scheduled change identifier.
+  /// @param config Replacement global risk configuration.
+  function executeGlobalRiskChange(bytes32 changeId, GlobalRiskConfig calldata config) external;
+
+  /// @notice Executes a committed generation registration or risk-policy replacement.
+  /// @param changeId Scheduled change identifier.
+  /// @param generationKey Full generation identifier.
+  /// @param config Replacement controller generation policy.
+  /// @param oracleConfig Immutable oracle policy used only for first registration.
+  function executeGenerationChange(
+    bytes32 changeId,
+    bytes32 generationKey,
+    GenerationConfig calldata config,
+    OracleConfig calldata oracleConfig
+  ) external;
+
+  /// @notice Executes a committed restoration to a less restrictive protocol mode.
+  /// @param changeId Scheduled change identifier.
+  /// @param mode Target operating mode.
+  function executeModeChange(bytes32 changeId, ProtocolMode mode) external;
   /// @notice Direct-sale and collateral-take liquidation routes supported by the MVP.
   enum LiquidationRoute {
     COLLATERAL_TAKE,
