@@ -9,7 +9,10 @@ pragma solidity 0.8.34;
 import {DreamMarginController} from "src/dreammargin/DreamMarginController.sol";
 import {IDreamMarginController} from "src/interfaces/dreammargin/IDreamMarginController.sol";
 import {LibDreamMarginErrors} from "src/libs/dreammargin/LibDreamMarginErrors.sol";
-import {GlobalRiskConfig} from "src/libs/dreammargin/LibDreamMarginStorage.sol";
+import {
+  GlobalRiskConfig,
+  LibDreamMarginStorage
+} from "src/libs/dreammargin/LibDreamMarginStorage.sol";
 
 /// @notice Test-only concrete controller with disabled lifecycle entrypoints.
 contract DreamMarginControllerHarness is DreamMarginController {
@@ -23,19 +26,35 @@ contract DreamMarginControllerHarness is DreamMarginController {
     GlobalRiskConfig memory globalRisk
   ) DreamMarginController(module_, vault_, oracle_, feeRecipient_, initialRoles, globalRisk) {}
 
-  /// @inheritdoc IDreamMarginController
-  function openPosition(OpenParams calldata)
+  /// @notice Returns aggregate custody and debt attribution for lifecycle assertions.
+  /// @param generationKey Exact generation identifier.
+  /// @param marketGroup Shared market debt bucket.
+  /// @param token Outcome-token contract.
+  /// @param outcomeId Exact outcome ID.
+  /// @return attributedShares Shares attributed to live positions for the exact ID.
+  /// @return outcomeDebtShares Debt shares attributed to the exact generation.
+  /// @return marketDebtShares Debt shares attributed to the shared market.
+  /// @return totalDebtShares Debt shares attributed across the controller.
+  function aggregateState(
+    bytes32 generationKey,
+    bytes32 marketGroup,
+    address token,
+    uint256 outcomeId
+  )
     external
-    pure
-    override
-    returns (uint256, uint256, uint256)
+    view
+    returns (
+      uint256 attributedShares,
+      uint256 outcomeDebtShares,
+      uint256 marketDebtShares,
+      uint256 totalDebtShares
+    )
   {
-    revert LibDreamMarginErrors.ActionBlocked(0, this.openPosition.selector);
-  }
-
-  /// @inheritdoc IDreamMarginController
-  function addCollateral(uint256, uint256) external pure override {
-    revert LibDreamMarginErrors.ActionBlocked(0, this.addCollateral.selector);
+    LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
+    attributedShares = self.attributedShares[token][outcomeId];
+    outcomeDebtShares = self.outcomeDebtShares[generationKey];
+    marketDebtShares = self.marketDebtShares[marketGroup];
+    totalDebtShares = self.totalDebtShares;
   }
 
   /// @inheritdoc IDreamMarginController

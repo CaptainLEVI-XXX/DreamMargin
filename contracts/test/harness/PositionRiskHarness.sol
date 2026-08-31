@@ -84,6 +84,14 @@ contract PositionRiskHarness {
     shares = LibPositionRisk.debtSharesUp(assets, indexWad);
   }
 
+  /// @notice Exposes debt shares rounded down for asset-limited repayment.
+  /// @param assets Maximum repayment assets.
+  /// @param indexWad Assets per debt share in WAD.
+  /// @return shares Retirable debt shares.
+  function debtSharesDown(uint256 assets, uint256 indexWad) external pure returns (uint256 shares) {
+    shares = LibPositionRisk.debtSharesDown(assets, indexWad);
+  }
+
   /// @notice Exposes linear debt-index accrual.
   /// @param indexWad Current index.
   /// @param annualRateWad Annual simple rate.

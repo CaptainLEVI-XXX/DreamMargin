@@ -72,6 +72,10 @@ contract LibPositionRiskTest is Test {
       assertEq(
         _risk.debtAssetsUp(shares, index), _fixture.readUint(string.concat(root, ".assets_up"))
       );
+      assertEq(
+        _risk.debtSharesDown(_fixture.readUint(string.concat(root, ".assets_up")), index),
+        _fixture.readUint(string.concat(root, ".shares_down"))
+      );
     }
   }
 

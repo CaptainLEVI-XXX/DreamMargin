@@ -110,17 +110,20 @@
     {
       "assets_up": 1,
       "index": 1000000000000000000,
-      "shares": 1
+      "shares": 1,
+      "shares_down": 1
     },
     {
       "assets_up": 2,
       "index": 1000000000000000001,
-      "shares": 1
+      "shares": 1,
+      "shares_down": 1
     },
     {
       "assets_up": 1075000,
       "index": 1075000000000000000,
-      "shares": 1000000
+      "shares": 1000000,
+      "shares_down": 1000000
     }
   ],
   "interest": [

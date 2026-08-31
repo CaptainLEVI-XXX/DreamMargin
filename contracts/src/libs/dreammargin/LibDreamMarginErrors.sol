@@ -165,6 +165,15 @@ library LibDreamMarginErrors {
   /// @param outcomeId Exact outcome ID whose approval failed.
   error TokenApprovalFailed(address token, address spender, uint256 outcomeId);
 
+  /// @notice Raised when an owner has not granted enough exact-ID outcome allowance.
+  /// @param token ERC-6909 outcome-token contract.
+  /// @param outcomeId Exact outcome ID required.
+  /// @param available Exact-ID allowance currently available.
+  /// @param required Outcome quantity requested.
+  error InsufficientOutcomeAllowance(
+    address token, uint256 outcomeId, uint256 available, uint256 required
+  );
+
   /// @notice Raised when an oracle generation lacks a mature observation window.
   /// @param generationKey Generation being valued.
   /// @param age Current observation-window age in seconds.
@@ -215,6 +224,17 @@ library LibDreamMarginErrors {
   /// @param resultingUtilization Resulting utilization in basis points.
   /// @param maximumUtilization Configured maximum utilization in basis points.
   error UtilizationExceeded(uint256 resultingUtilization, uint256 maximumUtilization);
+
+  /// @notice Raised when opening is attempted inside a generation's no-borrow window.
+  /// @param expiry Market trading expiry in seconds.
+  /// @param currentTime Current timestamp in seconds.
+  /// @param openingCutoff Required seconds remaining before expiry.
+  error OpeningCutoffReached(uint256 expiry, uint256 currentTime, uint256 openingCutoff);
+
+  /// @notice Raised when an opened position exceeds its share of observed executable depth.
+  /// @param resultingShares Total position outcome shares after execution.
+  /// @param maximumShares Maximum admitted shares derived from oracle depth.
+  error PositionDepthExceeded(uint256 resultingShares, uint256 maximumShares);
 
   /// @notice Raised when conservative collateral value does not support required health.
   /// @param value Conservative collateral value in raw collateral units.

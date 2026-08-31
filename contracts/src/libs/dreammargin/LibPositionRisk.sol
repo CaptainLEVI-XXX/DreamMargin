@@ -181,6 +181,19 @@ library LibPositionRisk {
     debtShares = FixedPointMathLib.fullMulDivUp(assets, LibDreamMarginConstants.WAD, debtIndexWad);
   }
 
+  /// @notice Converts repayable assets to debt shares without requiring more than those assets.
+  /// @param assets Maximum collateral available for repayment.
+  /// @param debtIndexWad Assets per debt share in WAD.
+  /// @return debtShares Retirable debt shares rounded down.
+  function debtSharesDown(uint256 assets, uint256 debtIndexWad)
+    internal
+    pure
+    returns (uint256 debtShares)
+  {
+    _nonzero(debtIndexWad, "DEBT_INDEX");
+    debtShares = FixedPointMathLib.fullMulDiv(assets, LibDreamMarginConstants.WAD, debtIndexWad);
+  }
+
   /// @notice Accrues a simple annualized WAD financing rate, rounded up.
   /// @param debtIndexWad Current nonzero debt index.
   /// @param annualRateWad Annual simple financing rate in WAD.

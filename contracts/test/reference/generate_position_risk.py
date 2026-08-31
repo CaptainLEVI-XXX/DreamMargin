@@ -58,11 +58,13 @@ def main() -> None:
 
     debt = []
     for shares, index in [(1, WAD), (1, WAD + 1), (10**6, 1_075_000_000_000_000_000)]:
+        assets_up = ceil_fraction(Fraction(shares * index, WAD))
         debt.append(
             {
                 "shares": shares,
                 "index": index,
-                "assets_up": ceil_fraction(Fraction(shares * index, WAD)),
+                "assets_up": assets_up,
+                "shares_down": (assets_up * WAD) // index,
             }
         )
 

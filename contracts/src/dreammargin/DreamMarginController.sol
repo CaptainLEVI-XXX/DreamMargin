@@ -6,7 +6,7 @@ pragma solidity 0.8.34;
 /// @notice Binds protocol dependencies and governs roles, modes, and exact market generations.
 /// @dev Lifecycle entrypoints are composed in later modules; all mutable shell state is namespaced.
 
-import {DreamDexAdapter} from "src/adapters/DreamDexAdapter.sol";
+import {PositionOpen} from "src/dreammargin/base/PositionOpen.sol";
 import {IDreamDexMarkOracle} from "src/interfaces/dreammargin/IDreamDexMarkOracle.sol";
 import {IDreamMarginController} from "src/interfaces/dreammargin/IDreamMarginController.sol";
 import {IDreamMarginVault} from "src/interfaces/dreammargin/IDreamMarginVault.sol";
@@ -27,7 +27,7 @@ import {
 } from "src/libs/dreammargin/LibDreamMarginStorage.sol";
 
 /// @notice Administrative controller shell statically composed with the DreamDEX adapter.
-abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapter {
+abstract contract DreamMarginController is PositionOpen {
   /// @notice Mask containing every role bit recognized by this deployment.
   uint256 private constant _ALL_ROLES = LibDreamMarginConstants.ROLE_GOVERNANCE
     | LibDreamMarginConstants.ROLE_RISK_STEWARD | LibDreamMarginConstants.ROLE_GUARDIAN
@@ -141,6 +141,21 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
   /// @inheritdoc IDreamMarginController
   function feeRecipient() external view returns (address recipient) {
     recipient = _FEE_RECIPIENT;
+  }
+
+  /// @inheritdoc PositionOpen
+  function _moduleAddress() internal view override returns (address module_) {
+    module_ = _MODULE;
+  }
+
+  /// @inheritdoc PositionOpen
+  function _vaultAddress() internal view override returns (address vault_) {
+    vault_ = _VAULT;
+  }
+
+  /// @inheritdoc PositionOpen
+  function _oracleAddress() internal view override returns (address oracle_) {
+    oracle_ = _ORACLE;
   }
 
   /// @inheritdoc IDreamMarginController
