@@ -7,6 +7,7 @@ pragma solidity 0.8.34;
 /// @dev Named risk values are conservative test fixtures, not production parameters.
 
 import {DreamMarginController} from "src/dreammargin/DreamMarginController.sol";
+import {PositionOpen} from "src/dreammargin/base/PositionOpen.sol";
 import {IDreamDexMarkOracle} from "src/interfaces/dreammargin/IDreamDexMarkOracle.sol";
 import {IDreamMarginController} from "src/interfaces/dreammargin/IDreamMarginController.sol";
 import {IDreamDexBinaryPool} from "src/interfaces/integrations/IDreamDexBinaryPool.sol";
@@ -58,6 +59,7 @@ contract DreamMarginControllerAdminTest is Test {
   MockDreamDexBinaryModule private _module;
   DreamMarginVault private _vault;
   DreamDexMarkOracle private _oracle;
+  PositionOpen private _positionOpen;
   DreamMarginControllerHarness private _controller;
   MarketKey private _key;
   bytes32 private _generationKey;
@@ -77,6 +79,7 @@ contract DreamMarginControllerAdminTest is Test {
     _module = new MockDreamDexBinaryModule(_SETTLEMENT);
     _module.setMarket(_MARKET_ID, 1, _moduleMarket());
     _setBook();
+    _positionOpen = new PositionOpen();
 
     uint256 nextNonce = vm.getNonce(address(this));
     address predictedController = vm.computeCreateAddress(address(this), nextNonce + 2);
@@ -87,6 +90,7 @@ contract DreamMarginControllerAdminTest is Test {
       address(_vault),
       address(_oracle),
       _FEE_RECIPIENT,
+      address(_positionOpen),
       _initialRoles(),
       _globalRisk()
     );

@@ -27,8 +27,8 @@ import {LibPositionRisk, PositionHealth} from "src/libs/dreammargin/LibPositionR
 import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 
-/// @notice Stateless opening lifecycle composed over the controller storage namespace.
-abstract contract PositionOpen is IDreamMarginController, DreamDexAdapter {
+/// @notice Immutable opening facet executed only through selector-specific controller delegation.
+contract PositionOpen is DreamDexAdapter {
   using SafeTransferLib for address;
 
   /// @notice Intermediate values retained while one atomic opening is reconciled.
@@ -63,15 +63,21 @@ abstract contract PositionOpen is IDreamMarginController, DreamDexAdapter {
     self.reentrancyStatus = LibDreamMarginConstants.REENTRANCY_UNLOCKED;
   }
 
-  /// @inheritdoc IDreamMarginController
-  function openPosition(OpenParams calldata params)
+  /// @notice Opens one isolated leveraged position atomically through the controller.
+  /// @param params Exact generation, collateral, leverage, price, fill, and deadline bounds.
+  /// @return positionId Newly allocated position identifier.
+  /// @return sharesBought Additional outcome shares received from actual execution deltas.
+  /// @return debtAssets Collateral debt created in native units.
+  function openPosition(IDreamMarginController.OpenParams calldata params)
     external
     nonReentrantPositionOpen
     returns (uint256 positionId, uint256 sharesBought, uint256 debtAssets)
   {
     LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
     if (self.mode != ProtocolMode.ACTIVE) {
-      revert LibDreamMarginErrors.ActionBlocked(uint8(self.mode), this.openPosition.selector);
+      revert LibDreamMarginErrors.ActionBlocked(
+        uint8(self.mode), IDreamMarginController.openPosition.selector
+      );
     }
     if (params.initialShares == 0) revert LibDreamMarginErrors.ZeroAmount(params.initialShares);
 
@@ -188,7 +194,7 @@ abstract contract PositionOpen is IDreamMarginController, DreamDexAdapter {
 
     sharesBought = accounting.sharesBought;
     debtAssets = accounting.finalDebtAssets;
-    emit PositionOpened(
+    emit IDreamMarginController.PositionOpened(
       positionId,
       msg.sender,
       accounting.generationKey,
@@ -198,7 +204,9 @@ abstract contract PositionOpen is IDreamMarginController, DreamDexAdapter {
     );
   }
 
-  /// @inheritdoc IDreamMarginController
+  /// @notice Adds the exact recorded outcome ID without borrowing or trading.
+  /// @param positionId Position receiving collateral.
+  /// @param shares Outcome shares transferred from the caller.
   function addCollateral(uint256 positionId, uint256 shares) external nonReentrantPositionOpen {
     if (shares == 0) revert LibDreamMarginErrors.ZeroAmount(shares);
     LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
@@ -219,20 +227,26 @@ abstract contract PositionOpen is IDreamMarginController, DreamDexAdapter {
     self.attributedShares[position.outcomeToken][position.outcomeId] += shares;
     // The namespaced guard remains locked across the exact-ID token interaction.
     // forge-lint: disable-next-line(reentrancy-events)
-    emit CollateralAdded(positionId, msg.sender, shares);
+    emit IDreamMarginController.CollateralAdded(positionId, msg.sender, shares);
   }
 
-  /// @notice Returns the immutable DreamDEX module supplied by the controller facade.
+  /// @notice Returns the immutable DreamDEX module through the executing controller facade.
   /// @return module_ Bound DreamDEX module.
-  function _moduleAddress() internal view virtual returns (address module_);
+  function _moduleAddress() internal view returns (address module_) {
+    module_ = IDreamMarginController(address(this)).module();
+  }
 
-  /// @notice Returns the immutable collateral vault supplied by the controller facade.
+  /// @notice Returns the immutable collateral vault through the executing controller facade.
   /// @return vault_ Bound collateral vault.
-  function _vaultAddress() internal view virtual returns (address vault_);
+  function _vaultAddress() internal view returns (address vault_) {
+    vault_ = IDreamMarginController(address(this)).vault();
+  }
 
-  /// @notice Returns the immutable mark oracle supplied by the controller facade.
+  /// @notice Returns the immutable mark oracle through the executing controller facade.
   /// @return oracle_ Bound generation oracle.
-  function _oracleAddress() internal view virtual returns (address oracle_);
+  function _oracleAddress() internal view returns (address oracle_) {
+    oracle_ = IDreamMarginController(address(this)).oracle();
+  }
 
   /// @notice Requires an exact enabled controller record matching all opening parameters.
   /// @param config Stored generation configuration.
@@ -241,7 +255,7 @@ abstract contract PositionOpen is IDreamMarginController, DreamDexAdapter {
   function _requireOpenGeneration(
     GenerationConfig storage config,
     bytes32 generationKey,
-    OpenParams calldata params
+    IDreamMarginController.OpenParams calldata params
   ) private view {
     if (config.frozen) {
       revert LibDreamMarginErrors.GenerationFrozen(generationKey);

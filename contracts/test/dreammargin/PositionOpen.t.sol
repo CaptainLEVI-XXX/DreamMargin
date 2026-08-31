@@ -7,6 +7,7 @@ pragma solidity 0.8.34;
 /// @dev Each test uses complete vault, oracle, controller, and DreamDEX integration models.
 
 import {DreamMarginController} from "src/dreammargin/DreamMarginController.sol";
+import {PositionOpen} from "src/dreammargin/base/PositionOpen.sol";
 import {IDreamMarginController} from "src/interfaces/dreammargin/IDreamMarginController.sol";
 import {IDreamDexBinaryPool} from "src/interfaces/integrations/IDreamDexBinaryPool.sol";
 
@@ -65,6 +66,7 @@ contract PositionOpenTest is Test {
   MockDreamDexBinaryModule private _module;
   DreamMarginVault private _vault;
   DreamDexMarkOracle private _oracle;
+  PositionOpen private _positionOpen;
   DreamMarginControllerHarness private _controller;
   MarketKey private _yesKey;
   MarketKey private _noKey;
@@ -86,6 +88,7 @@ contract PositionOpenTest is Test {
     _module = new MockDreamDexBinaryModule(_SETTLEMENT);
     _module.setMarket(_MARKET_ID, 1, _moduleMarket());
     _setBook();
+    _positionOpen = new PositionOpen();
 
     uint256 nextNonce = vm.getNonce(address(this));
     address predictedController = vm.computeCreateAddress(address(this), nextNonce + 2);
@@ -96,6 +99,7 @@ contract PositionOpenTest is Test {
       address(_vault),
       address(_oracle),
       _FEE_RECIPIENT,
+      address(_positionOpen),
       _initialRoles(),
       _globalRisk()
     );
@@ -152,6 +156,14 @@ contract PositionOpenTest is Test {
     assertEq(marketDebt, position.debtShares);
     assertEq(totalDebt, position.debtShares);
     assertEq(_vault.totalDebtShares(), totalDebt);
+  }
+
+  /// @notice Pins the opening facet and prevents direct calls outside initialized controller state.
+  function test_openingFacetIsImmutableAndOnlyUsableThroughController() external {
+    assertEq(_controller.positionOpenFacet(), address(_positionOpen));
+    vm.prank(_OWNER);
+    vm.expectRevert(abi.encodeWithSelector(LibDreamMarginErrors.ReentrantCall.selector, uint8(0)));
+    _positionOpen.openPosition(_yesParams());
   }
 
   /// @notice Complements the YES limit price when borrowing to buy NO shares.

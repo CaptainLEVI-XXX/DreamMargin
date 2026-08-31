@@ -22,9 +22,14 @@ contract DreamMarginControllerHarness is DreamMarginController {
     address vault_,
     address oracle_,
     address feeRecipient_,
+    address positionOpenFacet_,
     InitialRoles memory initialRoles,
     GlobalRiskConfig memory globalRisk
-  ) DreamMarginController(module_, vault_, oracle_, feeRecipient_, initialRoles, globalRisk) {}
+  )
+    DreamMarginController(
+      module_, vault_, oracle_, feeRecipient_, positionOpenFacet_, initialRoles, globalRisk
+    )
+  {}
 
   /// @notice Returns aggregate custody and debt attribution for lifecycle assertions.
   /// @param generationKey Exact generation identifier.

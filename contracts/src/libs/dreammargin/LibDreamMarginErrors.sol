@@ -10,6 +10,10 @@ library LibDreamMarginErrors {
   /// @param field Identifier of the address field.
   error ZeroAddress(bytes32 field);
 
+  /// @notice Raised when a lifecycle facet address has no deployed runtime code.
+  /// @param facet Address supplied as an immutable lifecycle facet.
+  error InvalidFacet(address facet);
+
   /// @notice Raised when an amount that must be positive is zero.
   /// @param amount Offending zero amount.
   error ZeroAmount(uint256 amount);

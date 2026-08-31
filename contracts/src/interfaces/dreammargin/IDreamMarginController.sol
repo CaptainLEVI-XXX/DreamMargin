@@ -73,6 +73,10 @@ interface IDreamMarginController {
   /// @return recipient Fee recipient address.
   function feeRecipient() external view returns (address recipient);
 
+  /// @notice Returns the immutable position-opening lifecycle facet.
+  /// @return facet Predeployed facet reached only by opening selectors.
+  function positionOpenFacet() external view returns (address facet);
+
   /// @notice Returns an account's complete role bitmap.
   /// @param account Account queried.
   /// @return roles Assigned role bits.

@@ -6,7 +6,7 @@ pragma solidity 0.8.34;
 /// @notice Binds protocol dependencies and governs roles, modes, and exact market generations.
 /// @dev Lifecycle entrypoints are composed in later modules; all mutable shell state is namespaced.
 
-import {PositionOpen} from "src/dreammargin/base/PositionOpen.sol";
+import {DreamDexAdapter} from "src/adapters/DreamDexAdapter.sol";
 import {IDreamDexMarkOracle} from "src/interfaces/dreammargin/IDreamDexMarkOracle.sol";
 import {IDreamMarginController} from "src/interfaces/dreammargin/IDreamMarginController.sol";
 import {IDreamMarginVault} from "src/interfaces/dreammargin/IDreamMarginVault.sol";
@@ -27,7 +27,7 @@ import {
 } from "src/libs/dreammargin/LibDreamMarginStorage.sol";
 
 /// @notice Administrative controller shell statically composed with the DreamDEX adapter.
-abstract contract DreamMarginController is PositionOpen {
+abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapter {
   /// @notice Mask containing every role bit recognized by this deployment.
   uint256 private constant _ALL_ROLES = LibDreamMarginConstants.ROLE_GOVERNANCE
     | LibDreamMarginConstants.ROLE_RISK_STEWARD | LibDreamMarginConstants.ROLE_GUARDIAN
@@ -44,6 +44,9 @@ abstract contract DreamMarginController is PositionOpen {
 
   /// @notice Immutable destination for already-accrued protocol fees.
   address private immutable _FEE_RECIPIENT;
+
+  /// @notice Immutable opening lifecycle facet reached only by its two explicit wrappers.
+  address private immutable _POSITION_OPEN_FACET;
 
   /// @notice Initial separated administrative accounts.
   /// @param governance Account scheduling high-impact delayed changes.
@@ -62,6 +65,7 @@ abstract contract DreamMarginController is PositionOpen {
   /// @param vault_ Collateral vault whose immutable controller must be this deployment.
   /// @param oracle_ Mark oracle whose configurator and module must match this deployment.
   /// @param feeRecipient_ Immutable fee destination.
+  /// @param positionOpenFacet_ Predeployed immutable opening facet.
   /// @param initialRoles Separated initial administrative accounts.
   /// @param globalRisk Initial global debt, loss, utilization, and delay bounds.
   constructor(
@@ -69,6 +73,7 @@ abstract contract DreamMarginController is PositionOpen {
     address vault_,
     address oracle_,
     address feeRecipient_,
+    address positionOpenFacet_,
     InitialRoles memory initialRoles,
     GlobalRiskConfig memory globalRisk
   ) {
@@ -77,6 +82,9 @@ abstract contract DreamMarginController is PositionOpen {
     _nonzero(oracle_, "ORACLE");
     if (feeRecipient_ == address(0)) {
       revert LibDreamMarginErrors.ZeroAddress("FEE_RECIPIENT");
+    }
+    if (positionOpenFacet_ == address(0)) {
+      revert LibDreamMarginErrors.ZeroAddress("POSITION_OPEN_FACET");
     }
     _nonzero(initialRoles.governance, "GOVERNANCE");
     _nonzero(initialRoles.riskSteward, "RISK_STEWARD");
@@ -105,11 +113,15 @@ abstract contract DreamMarginController is PositionOpen {
         bytes32(uint256(uint160(IDreamDexMarkOracle(oracle_).module())))
       );
     }
+    if (positionOpenFacet_.code.length == 0) {
+      revert LibDreamMarginErrors.InvalidFacet(positionOpenFacet_);
+    }
 
     _MODULE = module_;
     _VAULT = vault_;
     _ORACLE = oracle_;
     _FEE_RECIPIENT = feeRecipient_;
+    _POSITION_OPEN_FACET = positionOpenFacet_;
 
     LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
     self.globalRisk = globalRisk;
@@ -143,19 +155,19 @@ abstract contract DreamMarginController is PositionOpen {
     recipient = _FEE_RECIPIENT;
   }
 
-  /// @inheritdoc PositionOpen
-  function _moduleAddress() internal view override returns (address module_) {
-    module_ = _MODULE;
+  /// @inheritdoc IDreamMarginController
+  function positionOpenFacet() external view returns (address facet) {
+    facet = _POSITION_OPEN_FACET;
   }
 
-  /// @inheritdoc PositionOpen
-  function _vaultAddress() internal view override returns (address vault_) {
-    vault_ = _VAULT;
+  /// @inheritdoc IDreamMarginController
+  function openPosition(OpenParams calldata) external returns (uint256, uint256, uint256) {
+    _delegatePositionOpen();
   }
 
-  /// @inheritdoc PositionOpen
-  function _oracleAddress() internal view override returns (address oracle_) {
-    oracle_ = _ORACLE;
+  /// @inheritdoc IDreamMarginController
+  function addCollateral(uint256, uint256) external {
+    _delegatePositionOpen();
   }
 
   /// @inheritdoc IDreamMarginController
@@ -510,5 +522,27 @@ abstract contract DreamMarginController is PositionOpen {
     // The preceding bound check proves the conversion cannot truncate.
     // forge-lint: disable-next-line(unsafe-typecast)
     timestamp = uint40(value);
+  }
+
+  /// @notice Delegates the exact opening selector to the immutable opening facet and returns bytes.
+  /// @dev Memory layout: `pointer` references temporary calldata, then ABI return bytes.
+  ///      1. Copy the complete validated Solidity entrypoint calldata into free memory.
+  ///      2. Delegate only to the constructor-created immutable opening facet.
+  ///      3. Copy return data over the temporary region and bubble success or revert exactly.
+  ///      Safety Considerations: THE TARGET IS IMMUTABLE AND NOT CALLER-CONTROLLED; THE TWO
+  ///      CALLERS OF THIS HELPER EXPOSE ONLY OPENING SELECTORS; FREE MEMORY IS ADVANCED BEFORE
+  ///      RETURNING SO THE BLOCK DOES NOT ALIAS LIVE SOLIDITY MEMORY.
+  function _delegatePositionOpen() private {
+    address target = _POSITION_OPEN_FACET;
+    assembly ("memory-safe") {
+      let pointer := mload(0x40)
+      calldatacopy(pointer, 0, calldatasize())
+      let success := delegatecall(gas(), target, pointer, calldatasize(), 0, 0)
+      let size := returndatasize()
+      returndatacopy(pointer, 0, size)
+      mstore(0x40, and(add(add(pointer, size), 31), not(31)))
+      if iszero(success) { revert(pointer, size) }
+      return(pointer, size)
+    }
   }
 }
