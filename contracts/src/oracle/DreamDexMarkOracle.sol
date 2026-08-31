@@ -20,10 +20,7 @@ import {
 } from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.sol";
 import {LibDreamMarginErrors} from "src/libs/dreammargin/LibDreamMarginErrors.sol";
 import {LibDreamMarginStorage, MarketKey} from "src/libs/dreammargin/LibDreamMarginStorage.sol";
-import {BookWalk, LibPositionRisk, RiskBookLevel} from "src/libs/dreammargin/LibPositionRisk.sol";
-
-// Bounded book validation deliberately fails at the first malformed external level.
-// forge-lint: disable-start(require-revert-in-loop)
+import {LibPositionRisk} from "src/libs/dreammargin/LibPositionRisk.sol";
 
 /// @notice Bounded on-chain oracle for exact DreamDEX market generations.
 contract DreamDexMarkOracle is IDreamDexMarkOracle, DreamDexAdapter {
@@ -240,93 +237,19 @@ contract DreamDexMarkOracle is IDreamDexMarkOracle, DreamDexAdapter {
     view
     returns (uint256 bestBid, uint256 depthBid, uint256 oppositeAsk, uint256 conservativeMark)
   {
-    IDreamDexBinaryPool pool = IDreamDexBinaryPool(config.key.pool);
-    IDreamDexBinaryPool.BinaryPoolInfo memory info = pool.getBinaryPoolParams();
-    IDreamDexBinaryPool.BookLevel[] memory bids =
-      pool.getBookLevels(true, uint64(config.maxBookLevels));
-    IDreamDexBinaryPool.BookLevel[] memory asks =
-      pool.getBookLevels(false, uint64(config.maxBookLevels));
-    if (bids.length != 0 && asks.length != 0 && bids[0].price >= asks[0].price) {
-      revert LibDreamMarginErrors.InvalidBook(config.key.pool, bids[0].price, asks[0].price);
-    }
-
-    IDreamDexBinaryPool.BookLevel[] memory source = outcomeIndex == 0 ? bids : asks;
-    bool invert = outcomeIndex == 1;
-    RiskBookLevel[] memory direct =
-      _transform(source, info.oneCollateral, invert, true, config.key.pool);
-    RiskBookLevel[] memory opposite =
-      _transform(source, info.oneCollateral, !invert, false, config.key.pool);
-    BookWalk memory bidWalk =
-      LibPositionRisk.walkBidsDown(direct, config.depthQuantity, info.oneCollateral);
-    BookWalk memory askWalk =
-      LibPositionRisk.walkAsksUp(opposite, config.depthQuantity, info.oneCollateral);
-    if (!bidWalk.complete || !askWalk.complete) {
-      uint256 filled = bidWalk.filledQuantity < askWalk.filledQuantity
-        ? bidWalk.filledQuantity
-        : askWalk.filledQuantity;
+    RecoveryBook memory
+      book = _walkRecoveryBook(config.key, outcomeIndex, config.depthQuantity, config.maxBookLevels);
+    if (!book.direct.complete || !book.opposite.complete) {
+      uint256 filled = book.direct.filledQuantity < book.opposite.filledQuantity
+        ? book.direct.filledQuantity
+        : book.opposite.filledQuantity;
       revert LibDreamMarginErrors.InsufficientBookDepth(generationKey, filled, config.depthQuantity);
     }
-    bestBid = direct[0].price;
-    depthBid = bidWalk.averagePrice;
-    oppositeAsk = askWalk.averagePrice;
-    uint256 hedgeMark = info.oneCollateral - oppositeAsk;
+    bestBid = book.bestBid;
+    depthBid = book.direct.averagePrice;
+    oppositeAsk = book.opposite.averagePrice;
+    uint256 hedgeMark = book.oneCollateral - oppositeAsk;
     conservativeMark = depthBid > hedgeMark ? depthBid : hedgeMark;
-  }
-
-  /// @notice Converts YES-price levels into one outcome's bids or the opposite outcome's asks.
-  /// @param levels Raw YES-side levels.
-  /// @param oneCollateral One whole collateral unit.
-  /// @param invert Whether prices become `oneCollateral - price`.
-  /// @param descending Whether transformed prices must be nonincreasing.
-  /// @param pool Pool used in invalid-book errors.
-  /// @return transformed Normalized levels preserving quantity and executable order.
-  function _transform(
-    IDreamDexBinaryPool.BookLevel[] memory levels,
-    uint256 oneCollateral,
-    bool invert,
-    bool descending,
-    address pool
-  ) private pure returns (RiskBookLevel[] memory transformed) {
-    uint256 length = levels.length;
-    transformed = new RiskBookLevel[](length);
-    uint256 previous = 0;
-    // Every bounded external book level must fail closed at the first invalid value.
-    for (uint256 i = 0; i < length; ++i) {
-      uint256 rawPrice = levels[i].price;
-      _validateLevel(pool, rawPrice, levels[i].quantity, oneCollateral);
-      uint256 price = invert ? oneCollateral - rawPrice : rawPrice;
-      if (i != 0) _validateOrdering(pool, previous, price, descending);
-      transformed[i] = RiskBookLevel({price: price, quantity: levels[i].quantity});
-      previous = price;
-    }
-  }
-
-  /// @notice Rejects an empty or out-of-domain binary book level.
-  /// @param pool Pool used in the error.
-  /// @param price YES-side price.
-  /// @param quantity Visible level quantity.
-  /// @param oneCollateral Exclusive upper price bound.
-  function _validateLevel(address pool, uint256 price, uint256 quantity, uint256 oneCollateral)
-    private
-    pure
-  {
-    if (price == 0 || price >= oneCollateral || quantity == 0) {
-      revert LibDreamMarginErrors.InvalidBook(pool, price, price);
-    }
-  }
-
-  /// @notice Rejects a transformed level that breaks executable price ordering.
-  /// @param pool Pool used in the error.
-  /// @param previous Prior transformed price.
-  /// @param current Current transformed price.
-  /// @param descending Whether prices must be nonincreasing rather than nondecreasing.
-  function _validateOrdering(address pool, uint256 previous, uint256 current, bool descending)
-    private
-    pure
-  {
-    if ((descending && current > previous) || (!descending && current < previous)) {
-      revert LibDreamMarginErrors.InvalidBook(pool, previous, current);
-    }
   }
 
   /// @notice Validates structural policy bounds before permanent registration.
@@ -437,5 +360,3 @@ contract DreamDexMarkOracle is IDreamDexMarkOracle, DreamDexAdapter {
     timestamp = uint40(block.timestamp);
   }
 }
-
-// forge-lint: disable-end(require-revert-in-loop)

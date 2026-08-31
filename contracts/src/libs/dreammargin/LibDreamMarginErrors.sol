@@ -250,6 +250,12 @@ library LibDreamMarginErrors {
   /// @param remainingDebtShares Debt shares left after attempted repayment.
   error IncompleteClose(uint256 remainingShares, uint256 remainingDebtShares);
 
+  /// @notice Raised when ordinary liquidation is attempted at or above required maintenance.
+  /// @param positionId Position tested.
+  /// @param ltvBps Current conservative loan-to-value ratio.
+  /// @param maintenanceLtvBps Current expiry-compressed liquidation boundary.
+  error PositionNotLiquidatable(uint256 positionId, uint256 ltvBps, uint256 maintenanceLtvBps);
+
   /// @notice Raised when conservative collateral value does not support required health.
   /// @param value Conservative collateral value in raw collateral units.
   /// @param requiredValue Required value in raw collateral units.

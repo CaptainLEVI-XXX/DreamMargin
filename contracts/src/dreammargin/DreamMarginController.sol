@@ -51,6 +51,9 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
   /// @notice Immutable ordinary-reduction facet reached only by its four explicit wrappers.
   address private immutable _POSITION_CLOSE_FACET;
 
+  /// @notice Immutable liquidation facet reached only by its explicit wrapper.
+  address private immutable _POSITION_LIQUIDATION_FACET;
+
   /// @notice Initial separated administrative accounts.
   /// @param governance Account scheduling high-impact delayed changes.
   /// @param riskSteward Account assigned bounded risk-steward authority.
@@ -70,6 +73,7 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
   /// @param feeRecipient_ Immutable fee destination.
   /// @param positionOpenFacet_ Predeployed immutable opening facet.
   /// @param positionCloseFacet_ Predeployed immutable ordinary-reduction facet.
+  /// @param positionLiquidationFacet_ Predeployed immutable liquidation facet.
   /// @param initialRoles Separated initial administrative accounts.
   /// @param globalRisk Initial global debt, loss, utilization, and delay bounds.
   constructor(
@@ -79,6 +83,7 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
     address feeRecipient_,
     address positionOpenFacet_,
     address positionCloseFacet_,
+    address positionLiquidationFacet_,
     InitialRoles memory initialRoles,
     GlobalRiskConfig memory globalRisk
   ) {
@@ -93,6 +98,9 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
     }
     if (positionCloseFacet_ == address(0)) {
       revert LibDreamMarginErrors.ZeroAddress("POSITION_CLOSE_FACET");
+    }
+    if (positionLiquidationFacet_ == address(0)) {
+      revert LibDreamMarginErrors.ZeroAddress("POSITION_LIQUIDATION_FACET");
     }
     _nonzero(initialRoles.governance, "GOVERNANCE");
     _nonzero(initialRoles.riskSteward, "RISK_STEWARD");
@@ -127,6 +135,9 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
     if (positionCloseFacet_.code.length == 0) {
       revert LibDreamMarginErrors.InvalidFacet(positionCloseFacet_);
     }
+    if (positionLiquidationFacet_.code.length == 0) {
+      revert LibDreamMarginErrors.InvalidFacet(positionLiquidationFacet_);
+    }
 
     _MODULE = module_;
     _VAULT = vault_;
@@ -134,6 +145,7 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
     _FEE_RECIPIENT = feeRecipient_;
     _POSITION_OPEN_FACET = positionOpenFacet_;
     _POSITION_CLOSE_FACET = positionCloseFacet_;
+    _POSITION_LIQUIDATION_FACET = positionLiquidationFacet_;
 
     LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
     self.globalRisk = globalRisk;
@@ -178,6 +190,11 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
   }
 
   /// @inheritdoc IDreamMarginController
+  function positionLiquidationFacet() external view returns (address facet) {
+    facet = _POSITION_LIQUIDATION_FACET;
+  }
+
+  /// @inheritdoc IDreamMarginController
   function openPosition(OpenParams calldata) external returns (uint256, uint256, uint256) {
     _delegateLifecycle(_POSITION_OPEN_FACET);
   }
@@ -205,6 +222,11 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
   /// @inheritdoc IDreamMarginController
   function close(CloseParams calldata) external returns (uint256, uint256) {
     _delegateLifecycle(_POSITION_CLOSE_FACET);
+  }
+
+  /// @inheritdoc IDreamMarginController
+  function liquidate(LiquidationParams calldata) external returns (uint256, uint256, uint256) {
+    _delegateLifecycle(_POSITION_LIQUIDATION_FACET);
   }
 
   /// @inheritdoc IDreamMarginController

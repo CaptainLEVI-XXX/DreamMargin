@@ -24,6 +24,7 @@ contract DreamMarginControllerHarness is DreamMarginController {
     address feeRecipient_,
     address positionOpenFacet_,
     address positionCloseFacet_,
+    address positionLiquidationFacet_,
     InitialRoles memory initialRoles,
     GlobalRiskConfig memory globalRisk
   )
@@ -34,6 +35,7 @@ contract DreamMarginControllerHarness is DreamMarginController {
       feeRecipient_,
       positionOpenFacet_,
       positionCloseFacet_,
+      positionLiquidationFacet_,
       initialRoles,
       globalRisk
     )
@@ -68,16 +70,6 @@ contract DreamMarginControllerHarness is DreamMarginController {
     outcomeDebtShares = self.outcomeDebtShares[generationKey];
     marketDebtShares = self.marketDebtShares[marketGroup];
     totalDebtShares = self.totalDebtShares;
-  }
-
-  /// @inheritdoc IDreamMarginController
-  function liquidate(LiquidationParams calldata)
-    external
-    pure
-    override
-    returns (uint256, uint256, uint256)
-  {
-    revert LibDreamMarginErrors.ActionBlocked(0, this.liquidate.selector);
   }
 
   /// @inheritdoc IDreamMarginController

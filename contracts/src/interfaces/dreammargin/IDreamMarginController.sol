@@ -81,6 +81,10 @@ interface IDreamMarginController {
   /// @return facet Predeployed facet reached only by repayment and owner-exit selectors.
   function positionCloseFacet() external view returns (address facet);
 
+  /// @notice Returns the immutable permissionless liquidation lifecycle facet.
+  /// @return facet Predeployed facet reached only by the liquidation selector.
+  function positionLiquidationFacet() external view returns (address facet);
+
   /// @notice Returns an account's complete role bitmap.
   /// @param account Account queried.
   /// @return roles Assigned role bits.

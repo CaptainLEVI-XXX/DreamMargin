@@ -15,6 +15,7 @@ import {IERC6909} from "src/interfaces/integrations/IERC6909.sol";
 import {LibDreamMarginConstants} from "src/libs/dreammargin/LibDreamMarginConstants.sol";
 import {LibDreamMarginErrors} from "src/libs/dreammargin/LibDreamMarginErrors.sol";
 import {MarketKey} from "src/libs/dreammargin/LibDreamMarginStorage.sol";
+import {BookWalk, LibPositionRisk, RiskBookLevel} from "src/libs/dreammargin/LibPositionRisk.sol";
 
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 
@@ -102,6 +103,18 @@ abstract contract DreamDexAdapter {
     uint256 collateralAmount;
   }
 
+  /// @notice Canonical normalized book walks used by oracle and liquidation valuation.
+  /// @param bestBid Best executable same-outcome bid.
+  /// @param oneCollateral One whole collateral token in pool native units.
+  /// @param direct Same-outcome descending bid walk.
+  /// @param opposite Opposite-outcome ascending ask walk.
+  struct RecoveryBook {
+    uint256 bestBid;
+    uint256 oneCollateral;
+    BookWalk direct;
+    BookWalk opposite;
+  }
+
   // -------------------------------------------------------------------------
   // Generation validation
   // -------------------------------------------------------------------------
@@ -182,6 +195,84 @@ abstract contract DreamDexAdapter {
       orderExpiryNs: pool.marketExpiryNs(),
       orderBook: orderBook
     });
+  }
+
+  /// @notice Reads and normalizes one binary book into same-side bids and opposite-side asks.
+  /// @param key Exact pinned generation tuple.
+  /// @param outcomeIndex Zero for YES or one for NO.
+  /// @param quantity Outcome quantity walked through both recovery routes.
+  /// @param maxBookLevels Maximum external levels read from each raw side.
+  /// @return book Canonical route walks and pool economics.
+  function _walkRecoveryBook(
+    MarketKey memory key,
+    uint8 outcomeIndex,
+    uint256 quantity,
+    uint16 maxBookLevels
+  ) internal view returns (RecoveryBook memory book) {
+    if (outcomeIndex > 1) {
+      revert LibDreamMarginErrors.ValueOutOfBounds("OUTCOME_INDEX", outcomeIndex, 1);
+    }
+    IDreamDexBinaryPool pool = IDreamDexBinaryPool(key.pool);
+    IDreamDexBinaryPool.BinaryPoolInfo memory info = pool.getBinaryPoolParams();
+    if (info.oneCollateral == 0) {
+      revert LibDreamMarginErrors.ValueOutOfBounds("ONE_COLLATERAL", 0, type(uint256).max);
+    }
+    if (info.setBacking == 0) {
+      revert LibDreamMarginErrors.ValueOutOfBounds("SET_BACKING", 0, type(uint256).max);
+    }
+    IDreamDexBinaryPool.BookLevel[] memory bids = pool.getBookLevels(true, maxBookLevels);
+    IDreamDexBinaryPool.BookLevel[] memory asks = pool.getBookLevels(false, maxBookLevels);
+    if (bids.length != 0 && asks.length != 0 && bids[0].price >= asks[0].price) {
+      revert LibDreamMarginErrors.InvalidBook(key.pool, bids[0].price, asks[0].price);
+    }
+
+    IDreamDexBinaryPool.BookLevel[] memory source = outcomeIndex == 0 ? bids : asks;
+    bool invert = outcomeIndex == 1;
+    RiskBookLevel[] memory direct =
+      _transformRecoveryLevels(source, info.oneCollateral, invert, true, key.pool);
+    RiskBookLevel[] memory opposite =
+      _transformRecoveryLevels(source, info.oneCollateral, !invert, false, key.pool);
+    book = RecoveryBook({
+      bestBid: direct.length == 0 ? 0 : direct[0].price,
+      oneCollateral: info.oneCollateral,
+      direct: LibPositionRisk.walkBidsDown(direct, quantity, info.oneCollateral),
+      opposite: LibPositionRisk.walkAsksUp(opposite, quantity, info.oneCollateral)
+    });
+  }
+
+  /// @notice Converts one raw YES side into strictly ordered normalized outcome prices.
+  /// @param levels Raw pool levels.
+  /// @param oneCollateral Exclusive price ceiling.
+  /// @param invert Whether prices become `oneCollateral - price`.
+  /// @param descending Whether normalized prices must be nonincreasing.
+  /// @param pool Pool used in malformed-book errors.
+  /// @return transformed Normalized levels preserving quantities.
+  function _transformRecoveryLevels(
+    IDreamDexBinaryPool.BookLevel[] memory levels,
+    uint256 oneCollateral,
+    bool invert,
+    bool descending,
+    address pool
+  ) private pure returns (RiskBookLevel[] memory transformed) {
+    uint256 length = levels.length;
+    transformed = new RiskBookLevel[](length);
+    uint256 previous = 0;
+    // Every bounded external book level fails closed at the first malformed value.
+    // forge-lint: disable-start(require-revert-in-loop)
+    for (uint256 i = 0; i < length; ++i) {
+      uint256 rawPrice = levels[i].price;
+      uint256 quantity = levels[i].quantity;
+      if (rawPrice == 0 || rawPrice >= oneCollateral || quantity == 0) {
+        revert LibDreamMarginErrors.InvalidBook(pool, rawPrice, rawPrice);
+      }
+      uint256 price = invert ? oneCollateral - rawPrice : rawPrice;
+      if (i != 0 && ((descending && price > previous) || (!descending && price < previous))) {
+        revert LibDreamMarginErrors.InvalidBook(pool, previous, price);
+      }
+      transformed[i] = RiskBookLevel({price: price, quantity: quantity});
+      previous = price;
+    }
+    // forge-lint: disable-end(require-revert-in-loop)
   }
 
   // -------------------------------------------------------------------------

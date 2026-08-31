@@ -8,6 +8,7 @@ pragma solidity 0.8.34;
 
 import {DreamMarginController} from "src/dreammargin/DreamMarginController.sol";
 import {PositionClose} from "src/dreammargin/base/PositionClose.sol";
+import {PositionLiquidation} from "src/dreammargin/base/PositionLiquidation.sol";
 import {PositionOpen} from "src/dreammargin/base/PositionOpen.sol";
 import {IDreamDexMarkOracle} from "src/interfaces/dreammargin/IDreamDexMarkOracle.sol";
 import {IDreamMarginController} from "src/interfaces/dreammargin/IDreamMarginController.sol";
@@ -62,6 +63,7 @@ contract DreamMarginControllerAdminTest is Test {
   DreamDexMarkOracle private _oracle;
   PositionOpen private _positionOpen;
   PositionClose private _positionClose;
+  PositionLiquidation private _positionLiquidation;
   DreamMarginControllerHarness private _controller;
   MarketKey private _key;
   bytes32 private _generationKey;
@@ -83,6 +85,7 @@ contract DreamMarginControllerAdminTest is Test {
     _setBook();
     _positionOpen = new PositionOpen();
     _positionClose = new PositionClose();
+    _positionLiquidation = new PositionLiquidation();
 
     uint256 nextNonce = vm.getNonce(address(this));
     address predictedController = vm.computeCreateAddress(address(this), nextNonce + 2);
@@ -95,6 +98,7 @@ contract DreamMarginControllerAdminTest is Test {
       _FEE_RECIPIENT,
       address(_positionOpen),
       address(_positionClose),
+      address(_positionLiquidation),
       _initialRoles(),
       _globalRisk()
     );
@@ -177,6 +181,24 @@ contract DreamMarginControllerAdminTest is Test {
     vm.warp(_START + 1 days);
 
     vm.expectRevert(abi.encodeWithSelector(LibDreamMarginErrors.ZeroAmount.selector, 0));
+    _controller.executeGenerationChange(changeId, _generationKey, generation, oracleConfig);
+  }
+
+  /// @notice Rejects a liquidation incentive above one hundred percent before admission.
+  function test_generationRejectsExcessiveLiquidationBonus() external {
+    GenerationConfig memory generation = _generationConfig();
+    generation.risk.liquidationBonusBps = 10_001;
+    OracleConfig memory oracleConfig = _oracleConfig();
+    bytes32 changeId = keccak256("excessive-liquidation-bonus");
+    vm.prank(_RISK_STEWARD);
+    _controller.scheduleGenerationChange(changeId, _generationKey, generation, oracleConfig);
+    vm.warp(_START + 1 days);
+
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        LibDreamMarginErrors.InvalidBps.selector, bytes32("LIQUIDATION_BONUS"), uint256(10_001)
+      )
+    );
     _controller.executeGenerationChange(changeId, _generationKey, generation, oracleConfig);
   }
 
