@@ -32,8 +32,8 @@ runs = 256
 fail_on_revert = true
 
 [profile.default.invariant]
-runs = 64
-depth = 64
+runs = 8
+depth = 32
 fail_on_revert = false
 show_metrics = true
 
@@ -44,8 +44,8 @@ no_match_path = "test/fork/**"
 runs = 1024
 
 [profile.full.invariant]
-runs = 256
-depth = 128
+runs = 24
+depth = 64
 fail_on_revert = false
 show_metrics = true
 

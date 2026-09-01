@@ -74,6 +74,21 @@ contract MockDreamDexBinaryPool is IDreamDexBinaryPool {
   /// @notice Last submitted binary kind.
   uint8 public lastKind;
 
+  /// @notice Last submitted YES-side price.
+  uint256 public lastPrice;
+
+  /// @notice Last submitted outcome quantity.
+  uint256 public lastQuantity;
+
+  /// @notice Last submitted nanosecond deadline.
+  uint64 public lastDeadlineNs;
+
+  /// @notice Timestamp at which the last valid order reached the venue model.
+  uint256 public lastSubmittedAt;
+
+  /// @notice Number of valid order submissions observed by the venue model.
+  uint256 public submissionCount;
+
   /// @notice Last submitted immediate order type.
   uint8 public lastOrderType;
 
@@ -199,6 +214,11 @@ contract MockDreamDexBinaryPool is IDreamDexBinaryPool {
     ) revert MockDreamDexInvalidGrid(price, quantity);
 
     lastKind = kind;
+    lastPrice = price;
+    lastQuantity = quantity;
+    lastDeadlineNs = expireTimestampNs;
+    lastSubmittedAt = block.timestamp;
+    ++submissionCount;
     lastOrderType = orderType;
     lastSelfMatchingOption = selfMatchingOption;
     lastBuilder = builder;
