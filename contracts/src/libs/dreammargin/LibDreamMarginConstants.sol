@@ -102,14 +102,4 @@ library LibDreamMarginConstants {
 
   /// @notice Optional keeper role for explicitly keeper-gated maintenance.
   uint256 internal constant ROLE_KEEPER = 1 << 4;
-
-  // -------------------------------------------------------------------------
-  // Reentrancy states
-  // -------------------------------------------------------------------------
-
-  /// @notice Reentrancy guard state outside an external interaction.
-  uint8 internal constant REENTRANCY_UNLOCKED = 1;
-
-  /// @notice Reentrancy guard state during a protected interaction.
-  uint8 internal constant REENTRANCY_LOCKED = 2;
 }

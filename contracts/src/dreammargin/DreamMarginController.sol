@@ -163,7 +163,6 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
     self.globalRisk = globalRisk;
     self.nextPositionId = LibDreamMarginConstants.FIRST_POSITION_ID;
     self.mode = ProtocolMode.ACTIVE;
-    self.reentrancyStatus = LibDreamMarginConstants.REENTRANCY_UNLOCKED;
     self.initialized = true;
     _assignInitialRole(self, initialRoles.governance, LibDreamMarginConstants.ROLE_GOVERNANCE);
     _assignInitialRole(self, initialRoles.riskSteward, LibDreamMarginConstants.ROLE_RISK_STEWARD);

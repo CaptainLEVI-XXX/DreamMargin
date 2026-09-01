@@ -43,10 +43,6 @@ library LibDreamMarginErrors {
   /// @param initialized Existing initialization state.
   error AlreadyInitialized(bool initialized);
 
-  /// @notice Raised when a protected function is entered recursively.
-  /// @param state Current reentrancy-guard state.
-  error ReentrantCall(uint8 state);
-
   /// @notice Raised when an action is unavailable in the current protocol mode.
   /// @param mode Current protocol mode encoding.
   /// @param action Identifier of the rejected action.

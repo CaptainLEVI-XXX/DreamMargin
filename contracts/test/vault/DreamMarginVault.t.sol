@@ -13,6 +13,7 @@ import {MockCallbackERC20, MockFeeOnTransferERC20} from "test/mock/AdversarialER
 import {MockERC20} from "test/mock/MockERC20.sol";
 
 import {Test} from "forge-std/Test.sol";
+import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
 
 // These tests intentionally exercise delegated ERC-20 movement, ignored values on expected-revert
 // calls, and fixed-width error selectors whose truncation is the behavior under test.
@@ -532,7 +533,7 @@ contract DreamMarginVaultTest is Test {
     callbackVault.deposit(100 * _UNIT, _ALICE);
     assertFalse(callbackAsset.lastCallbackSucceeded());
     assertEq(
-      bytes4(callbackAsset.lastCallbackReturnData()), LibDreamMarginErrors.ReentrantCall.selector
+      bytes4(callbackAsset.lastCallbackReturnData()), ReentrancyGuardTransient.Reentrancy.selector
     );
     assertEq(callbackVault.totalAssets(), 100 * _UNIT);
   }

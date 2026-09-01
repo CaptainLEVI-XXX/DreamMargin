@@ -14,6 +14,7 @@ import {IERC6909} from "src/interfaces/integrations/IERC6909.sol";
 
 import {LibDreamMarginConstants} from "src/libs/dreammargin/LibDreamMarginConstants.sol";
 import {LibDreamMarginErrors} from "src/libs/dreammargin/LibDreamMarginErrors.sol";
+import {DreamMarginReentrancyGuard} from "src/libs/dreammargin/DreamMarginReentrancyGuard.sol";
 import {OracleConfig} from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.sol";
 import {
   GenerationConfig,
@@ -28,7 +29,7 @@ import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 
 /// @notice Immutable opening facet executed only through selector-specific controller delegation.
-contract PositionOpen is DreamDexAdapter {
+contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
   using SafeTransferLib for address;
 
   /// @notice Intermediate values retained while one atomic opening is reconciled.
@@ -51,18 +52,6 @@ contract PositionOpen is DreamDexAdapter {
     uint256 finalDebtAssets;
   }
 
-  /// @notice Prevents callbacks from reentering any composed opening lifecycle action.
-  modifier nonReentrantPositionOpen() {
-    LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
-    uint8 status = self.reentrancyStatus;
-    if (status != LibDreamMarginConstants.REENTRANCY_UNLOCKED) {
-      revert LibDreamMarginErrors.ReentrantCall(status);
-    }
-    self.reentrancyStatus = LibDreamMarginConstants.REENTRANCY_LOCKED;
-    _;
-    self.reentrancyStatus = LibDreamMarginConstants.REENTRANCY_UNLOCKED;
-  }
-
   /// @notice Opens one isolated leveraged position atomically through the controller.
   /// @param params Exact generation, collateral, leverage, price, fill, and deadline bounds.
   /// @return positionId Newly allocated position identifier.
@@ -70,7 +59,7 @@ contract PositionOpen is DreamDexAdapter {
   /// @return debtAssets Collateral debt created in native units.
   function openPosition(IDreamMarginController.OpenParams calldata params)
     external
-    nonReentrantPositionOpen
+    nonReentrant
     returns (uint256 positionId, uint256 sharesBought, uint256 debtAssets)
   {
     LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
@@ -207,7 +196,7 @@ contract PositionOpen is DreamDexAdapter {
   /// @notice Adds the exact recorded outcome ID without borrowing or trading.
   /// @param positionId Position receiving collateral.
   /// @param shares Outcome shares transferred from the caller.
-  function addCollateral(uint256 positionId, uint256 shares) external nonReentrantPositionOpen {
+  function addCollateral(uint256 positionId, uint256 shares) external nonReentrant {
     if (shares == 0) revert LibDreamMarginErrors.ZeroAmount(shares);
     LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
     Position storage position = self.positions[positionId];

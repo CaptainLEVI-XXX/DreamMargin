@@ -37,6 +37,7 @@ import {MockDreamDexBinaryPool} from "test/mock/MockDreamDexBinaryPool.sol";
 import {MockERC6909} from "test/mock/MockERC6909.sol";
 
 import {Test} from "forge-std/Test.sol";
+import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
 
 // Expected-revert lifecycle calls intentionally ignore returned values.
 // forge-lint: disable-start(unused-return)
@@ -416,9 +417,7 @@ contract PositionLiquidationTest is Test {
     assertFalse(_collateral.lastCallbackSucceeded());
     assertEq(
       _collateral.lastCallbackReturnData(),
-      abi.encodeWithSelector(
-        LibDreamMarginErrors.ReentrantCall.selector, LibDreamMarginConstants.REENTRANCY_LOCKED
-      )
+      abi.encodeWithSelector(ReentrancyGuardTransient.Reentrancy.selector)
     );
     _assertPosition(positionId, 0, 0, PositionStatus.CLOSED);
   }
@@ -426,7 +425,7 @@ contract PositionLiquidationTest is Test {
   /// @notice Pins the liquidation facet and prevents bypassing controller storage and its lock.
   function test_liquidationFacetIsPinnedAndCannotBeCalledDirectly() external {
     assertEq(_controller.positionLiquidationFacet(), address(_positionLiquidation));
-    vm.expectRevert(abi.encodeWithSelector(LibDreamMarginErrors.ReentrantCall.selector, uint8(0)));
+    vm.expectRevert(abi.encodeWithSelector(LibDreamMarginErrors.PositionNotFound.selector, 1));
     _positionLiquidation.liquidate(_take(1, _ONE, 0));
   }
 

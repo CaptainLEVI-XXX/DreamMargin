@@ -56,13 +56,11 @@ contract DreamMarginStorageTest is Test {
     assertEq(uint256(DREAM_DEX_MARK_ORACLE_STORAGE_SLOT) & 0xff, 0);
 
     GlobalRiskConfig memory globalRisk = _globalRiskFixture();
-    _harness.writeControllerScalars(
-      globalRisk, 11, 12, 13, 14, 15, ProtocolMode.REDUCE_ONLY, 2, true
-    );
+    _harness.writeControllerScalars(globalRisk, 11, 12, 13, 14, 15, ProtocolMode.REDUCE_ONLY, true);
 
     uint256[14] memory vaultValues;
     vaultValues[0] = 101;
-    _harness.writeVault(address(0xA1), address(0xB2), vaultValues, 102, 1, true);
+    _harness.writeVault(address(0xA1), address(0xB2), vaultValues, 102, true);
 
     MarketKey memory key = _marketKeyFixture();
     OracleConfig memory oracleConfig = _oracleConfigFixture(key);
@@ -89,15 +87,10 @@ contract DreamMarginStorageTest is Test {
       uint40 lossWindowStart,
       uint40 reduceOnlyStart,
       ProtocolMode storedMode,
-      uint8 controllerGuard,
       bool controllerInitialized
     ) = _harness.readControllerScalars();
-    (
-      uint256[14] memory storedVaultValues,
-      uint40 vaultAccrual,
-      uint8 vaultGuard,
-      bool vaultInitialized
-    ) = _harness.readVault(address(0xA1), address(0xB2));
+    (uint256[14] memory storedVaultValues, uint40 vaultAccrual, bool vaultInitialized) =
+      _harness.readVault(address(0xA1), address(0xB2));
     (
       OracleConfig memory storedConfig,
       ObservationRing memory storedRing,
@@ -112,11 +105,9 @@ contract DreamMarginStorageTest is Test {
     assertEq(lossWindowStart, 14);
     assertEq(reduceOnlyStart, 15);
     assertEq(uint8(storedMode), uint8(ProtocolMode.REDUCE_ONLY));
-    assertEq(controllerGuard, 2);
     assertTrue(controllerInitialized);
     assertEq(storedVaultValues[0], 101);
     assertEq(vaultAccrual, 102);
-    assertEq(vaultGuard, 1);
     assertTrue(vaultInitialized);
     assertEq(keccak256(abi.encode(storedConfig)), keccak256(abi.encode(oracleConfig)));
     assertEq(keccak256(abi.encode(storedRing)), keccak256(abi.encode(ring)));
@@ -207,7 +198,6 @@ contract DreamMarginStorageTest is Test {
       type(uint40).max - 1,
       type(uint40).max,
       ProtocolMode.PAUSED,
-      type(uint8).max,
       true
     );
 
@@ -219,7 +209,6 @@ contract DreamMarginStorageTest is Test {
       uint40 lossWindowStartedAt,
       uint40 reduceOnlyTriggeredAt,
       ProtocolMode mode,
-      uint8 reentrancyStatus,
       bool initialized
     ) = _harness.readControllerScalars();
 
@@ -230,7 +219,6 @@ contract DreamMarginStorageTest is Test {
     assertEq(lossWindowStartedAt, type(uint40).max - 1);
     assertEq(reduceOnlyTriggeredAt, type(uint40).max);
     assertEq(uint8(mode), uint8(ProtocolMode.PAUSED));
-    assertEq(reentrancyStatus, type(uint8).max);
     assertTrue(initialized);
 
     uint256[5] memory values = [uint256(41), 42, 43, 44, 45];
@@ -258,19 +246,12 @@ contract DreamMarginStorageTest is Test {
       values[i] = i + 1;
     }
 
-    _harness.writeVault(
-      address(0xA55E7), address(0x5EED), values, type(uint40).max, type(uint8).max, true
-    );
+    _harness.writeVault(address(0xA55E7), address(0x5EED), values, type(uint40).max, true);
 
-    (
-      uint256[14] memory storedValues,
-      uint40 lastAccrual,
-      uint8 reentrancyStatus,
-      bool initialized
-    ) = _harness.readVault(address(0xA55E7), address(0x5EED));
+    (uint256[14] memory storedValues, uint40 lastAccrual, bool initialized) =
+      _harness.readVault(address(0xA55E7), address(0x5EED));
     assertEq(keccak256(abi.encode(storedValues)), keccak256(abi.encode(values)));
     assertEq(lastAccrual, type(uint40).max);
-    assertEq(reentrancyStatus, type(uint8).max);
     assertTrue(initialized);
   }
 

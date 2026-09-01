@@ -177,7 +177,6 @@ library LibDreamMarginStorage {
   /// @param lossWindowStartedAt Start timestamp of the active realized-loss window.
   /// @param reduceOnlyTriggeredAt Timestamp of the latest loss-triggered reduce-only transition.
   /// @param mode Protocol-wide availability state.
-  /// @param reentrancyStatus Current reentrancy-guard state.
   /// @param initialized Whether controller initialization has completed.
   struct State {
     mapping(uint256 positionId => Position position) positions;
@@ -196,7 +195,6 @@ library LibDreamMarginStorage {
     uint40 lossWindowStartedAt;
     uint40 reduceOnlyTriggeredAt;
     ProtocolMode mode;
-    uint8 reentrancyStatus;
     bool initialized;
   }
 

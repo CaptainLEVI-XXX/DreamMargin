@@ -69,7 +69,6 @@ contract DreamMarginStorageHarness {
   /// @param lossWindowStartedAt Active loss-window start timestamp.
   /// @param reduceOnlyTriggeredAt Latest loss-triggered reduce-only timestamp.
   /// @param mode Protocol-wide operating mode.
-  /// @param reentrancyStatus Reentrancy-guard state.
   /// @param initialized Initialization state.
   function writeControllerScalars(
     GlobalRiskConfig calldata globalRisk,
@@ -79,7 +78,6 @@ contract DreamMarginStorageHarness {
     uint40 lossWindowStartedAt,
     uint40 reduceOnlyTriggeredAt,
     ProtocolMode mode,
-    uint8 reentrancyStatus,
     bool initialized
   ) external {
     LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
@@ -90,7 +88,6 @@ contract DreamMarginStorageHarness {
     self.lossWindowStartedAt = lossWindowStartedAt;
     self.reduceOnlyTriggeredAt = reduceOnlyTriggeredAt;
     self.mode = mode;
-    self.reentrancyStatus = reentrancyStatus;
     self.initialized = initialized;
   }
 
@@ -102,7 +99,6 @@ contract DreamMarginStorageHarness {
   /// @return lossWindowStartedAt Active loss-window start timestamp.
   /// @return reduceOnlyTriggeredAt Latest loss-triggered reduce-only timestamp.
   /// @return mode Protocol-wide operating mode.
-  /// @return reentrancyStatus Reentrancy-guard state.
   /// @return initialized Initialization state.
   function readControllerScalars()
     external
@@ -115,7 +111,6 @@ contract DreamMarginStorageHarness {
       uint40 lossWindowStartedAt,
       uint40 reduceOnlyTriggeredAt,
       ProtocolMode mode,
-      uint8 reentrancyStatus,
       bool initialized
     )
   {
@@ -127,7 +122,6 @@ contract DreamMarginStorageHarness {
     lossWindowStartedAt = self.lossWindowStartedAt;
     reduceOnlyTriggeredAt = self.reduceOnlyTriggeredAt;
     mode = self.mode;
-    reentrancyStatus = self.reentrancyStatus;
     initialized = self.initialized;
   }
 
@@ -217,14 +211,12 @@ contract DreamMarginStorageHarness {
   /// @param values Balance, allowance, supply, cash, debt, interest, debt shares, index,
   ///        locked reserve, protocol reserve, fees, realized loss, recovery, and reserve shares.
   /// @param lastAccrual Last financing accrual timestamp.
-  /// @param reentrancyStatus Reentrancy-guard state.
   /// @param initialized Initialization state.
   function writeVault(
     address account,
     address spender,
     uint256[14] calldata values,
     uint40 lastAccrual,
-    uint8 reentrancyStatus,
     bool initialized
   ) external {
     LibDreamMarginVaultStorage.State storage self = LibDreamMarginVaultStorage.get();
@@ -243,7 +235,6 @@ contract DreamMarginStorageHarness {
     self.recoveredBadDebt = values[12];
     self.protocolReserveShares = values[13];
     self.lastAccrual = lastAccrual;
-    self.reentrancyStatus = reentrancyStatus;
     self.initialized = initialized;
   }
 
@@ -253,17 +244,11 @@ contract DreamMarginStorageHarness {
   /// @return values Balance, allowance, supply, cash, debt, interest, debt shares, index,
   ///         locked reserve, protocol reserve, fees, realized loss, recovery, and reserve shares.
   /// @return lastAccrual Last financing accrual timestamp.
-  /// @return reentrancyStatus Reentrancy-guard state.
   /// @return initialized Initialization state.
   function readVault(address account, address spender)
     external
     view
-    returns (
-      uint256[14] memory values,
-      uint40 lastAccrual,
-      uint8 reentrancyStatus,
-      bool initialized
-    )
+    returns (uint256[14] memory values, uint40 lastAccrual, bool initialized)
   {
     LibDreamMarginVaultStorage.State storage self = LibDreamMarginVaultStorage.get();
     values[0] = self.balanceOf[account];
@@ -281,7 +266,6 @@ contract DreamMarginStorageHarness {
     values[12] = self.recoveredBadDebt;
     values[13] = self.protocolReserveShares;
     lastAccrual = self.lastAccrual;
-    reentrancyStatus = self.reentrancyStatus;
     initialized = self.initialized;
   }
 

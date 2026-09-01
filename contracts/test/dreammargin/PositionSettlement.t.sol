@@ -39,6 +39,7 @@ import {MockDreamDexBinarySettlement} from "test/mock/MockDreamDexBinarySettleme
 import {MockERC6909} from "test/mock/MockERC6909.sol";
 
 import {Test} from "forge-std/Test.sol";
+import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
 
 // Fixed-width fixture casts are bounded, and expected-revert calls intentionally ignore returns.
 // forge-lint: disable-start(unsafe-typecast, unused-return)
@@ -450,7 +451,7 @@ contract PositionSettlementTest is Test {
     _controller.settle(positionId);
 
     assertFalse(_settlement.lastCallbackSucceeded());
-    assertEq(bytes4(_settlement.lastCallbackData()), LibDreamMarginErrors.ReentrantCall.selector);
+    assertEq(bytes4(_settlement.lastCallbackData()), ReentrancyGuardTransient.Reentrancy.selector);
     _assertClosed(positionId);
   }
 
@@ -533,9 +534,9 @@ contract PositionSettlementTest is Test {
     _controller.recordRecovery(7 * _ONE);
   }
 
-  /// @notice Direct facet calls fail because only controller storage initializes the shared guard.
+  /// @notice Direct facet calls cannot reach lifecycle state held by the controller.
   function test_directFacetCallCannotReachLifecycleState() external {
-    vm.expectRevert(abi.encodeWithSelector(LibDreamMarginErrors.ReentrantCall.selector, uint8(0)));
+    vm.expectRevert(abi.encodeWithSelector(LibDreamMarginErrors.PositionNotFound.selector, 1));
     _positionSettlement.settle(1);
   }
 

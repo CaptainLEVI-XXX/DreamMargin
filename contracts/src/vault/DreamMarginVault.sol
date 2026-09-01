@@ -13,12 +13,16 @@ import {LibDreamMarginConstants} from "src/libs/dreammargin/LibDreamMarginConsta
 import {LibDreamMarginErrors} from "src/libs/dreammargin/LibDreamMarginErrors.sol";
 import {LibDreamMarginVaultStorage} from "src/libs/dreammargin/LibDreamMarginVaultStorage.sol";
 import {LibPositionRisk} from "src/libs/dreammargin/LibPositionRisk.sol";
+import {DreamMarginReentrancyGuard} from "src/libs/dreammargin/DreamMarginReentrancyGuard.sol";
 
 import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 
+// Forge cannot currently infer the inherited Solady transient lock held across external calls.
+// forge-lint: disable-start(reentrancy-events)
+
 /// @notice ERC-4626-compatible vault shares backed by cash and performing controller receivables.
-contract DreamMarginVault is IDreamMarginVault {
+contract DreamMarginVault is IDreamMarginVault, DreamMarginReentrancyGuard {
   // -------------------------------------------------------------------------
   // Immutable configuration
   // -------------------------------------------------------------------------
@@ -68,7 +72,6 @@ contract DreamMarginVault is IDreamMarginVault {
     LibDreamMarginVaultStorage.State storage self = LibDreamMarginVaultStorage.get();
     self.debtIndexWad = LibDreamMarginConstants.WAD;
     self.lastAccrual = _timestamp40();
-    self.reentrancyStatus = LibDreamMarginConstants.REENTRANCY_UNLOCKED;
     self.initialized = true;
   }
 
@@ -78,17 +81,6 @@ contract DreamMarginVault is IDreamMarginVault {
       revert LibDreamMarginErrors.NotController(msg.sender, _CONTROLLER);
     }
     _;
-  }
-
-  /// @notice Prevents callback-enabled collateral from reentering asset-moving functions.
-  modifier nonReentrant() {
-    LibDreamMarginVaultStorage.State storage self = LibDreamMarginVaultStorage.get();
-    if (self.reentrancyStatus != LibDreamMarginConstants.REENTRANCY_UNLOCKED) {
-      revert LibDreamMarginErrors.ReentrantCall(self.reentrancyStatus);
-    }
-    self.reentrancyStatus = LibDreamMarginConstants.REENTRANCY_LOCKED;
-    _;
-    self.reentrancyStatus = LibDreamMarginConstants.REENTRANCY_UNLOCKED;
   }
 
   // -------------------------------------------------------------------------
@@ -761,3 +753,5 @@ contract DreamMarginVault is IDreamMarginVault {
     timestamp = uint40(block.timestamp);
   }
 }
+
+// forge-lint: disable-end(reentrancy-events)

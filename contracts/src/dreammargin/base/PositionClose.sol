@@ -15,6 +15,7 @@ import {IERC6909} from "src/interfaces/integrations/IERC6909.sol";
 
 import {LibDreamMarginConstants} from "src/libs/dreammargin/LibDreamMarginConstants.sol";
 import {LibDreamMarginErrors} from "src/libs/dreammargin/LibDreamMarginErrors.sol";
+import {DreamMarginReentrancyGuard} from "src/libs/dreammargin/DreamMarginReentrancyGuard.sol";
 import {
   GenerationConfig,
   LibDreamMarginStorage,
@@ -28,20 +29,8 @@ import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 
 /// @notice Immutable ordinary-reduction facet reached through explicit controller wrappers.
-contract PositionClose is DreamDexAdapter {
+contract PositionClose is DreamDexAdapter, DreamMarginReentrancyGuard {
   using SafeTransferLib for address;
-
-  /// @notice Prevents callbacks from crossing any controller lifecycle transition.
-  modifier nonReentrantPositionClose() {
-    LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
-    uint8 status = self.reentrancyStatus;
-    if (status != LibDreamMarginConstants.REENTRANCY_UNLOCKED) {
-      revert LibDreamMarginErrors.ReentrantCall(status);
-    }
-    self.reentrancyStatus = LibDreamMarginConstants.REENTRANCY_LOCKED;
-    _;
-    self.reentrancyStatus = LibDreamMarginConstants.REENTRANCY_UNLOCKED;
-  }
 
   /// @notice Repays up to a bounded amount for any active position in every protocol mode.
   /// @param positionId Position whose debt decreases.
@@ -49,7 +38,7 @@ contract PositionClose is DreamDexAdapter {
   /// @return assetsRepaid Collateral actually received by the vault.
   function repay(uint256 positionId, uint256 maxAssets)
     external
-    nonReentrantPositionClose
+    nonReentrant
     returns (uint256 assetsRepaid)
   {
     if (maxAssets == 0) revert LibDreamMarginErrors.ZeroAmount(maxAssets);
@@ -68,10 +57,7 @@ contract PositionClose is DreamDexAdapter {
   /// @notice Withdraws debt-free or conservatively excess outcome collateral to its owner.
   /// @param positionId Position whose attributed shares decrease.
   /// @param shares Exact shares transferred to the owner.
-  function withdrawCollateral(uint256 positionId, uint256 shares)
-    external
-    nonReentrantPositionClose
-  {
+  function withdrawCollateral(uint256 positionId, uint256 shares) external nonReentrant {
     if (shares == 0) revert LibDreamMarginErrors.ZeroAmount(shares);
     LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
     Position storage position = _activePosition(self, positionId);
@@ -101,7 +87,7 @@ contract PositionClose is DreamDexAdapter {
   /// @return assetsRepaid Actual collateral received by the vault.
   function deleverage(IDreamMarginController.DeleverageParams calldata params)
     external
-    nonReentrantPositionClose
+    nonReentrant
     returns (uint256 sharesSold, uint256 assetsRepaid)
   {
     if (params.sharesToSell == 0) {
@@ -159,7 +145,7 @@ contract PositionClose is DreamDexAdapter {
   /// @return sharesOut Residual outcome shares returned after debt repayment.
   function close(IDreamMarginController.CloseParams calldata params)
     external
-    nonReentrantPositionClose
+    nonReentrant
     returns (uint256 assetsOut, uint256 sharesOut)
   {
     LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();

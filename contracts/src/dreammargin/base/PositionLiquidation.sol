@@ -16,6 +16,7 @@ import {IERC6909} from "src/interfaces/integrations/IERC6909.sol";
 
 import {LibDreamMarginConstants} from "src/libs/dreammargin/LibDreamMarginConstants.sol";
 import {LibDreamMarginErrors} from "src/libs/dreammargin/LibDreamMarginErrors.sol";
+import {DreamMarginReentrancyGuard} from "src/libs/dreammargin/DreamMarginReentrancyGuard.sol";
 import {
   GenerationConfig,
   LibDreamMarginStorage,
@@ -33,7 +34,7 @@ import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 
 /// @notice Immutable liquidation facet reached through the controller's exact selector wrapper.
-contract PositionLiquidation is DreamDexAdapter {
+contract PositionLiquidation is DreamDexAdapter, DreamMarginReentrancyGuard {
   using SafeTransferLib for address;
 
   /// @notice Values captured at the eligibility boundary before liquidation interactions.
@@ -52,18 +53,6 @@ contract PositionLiquidation is DreamDexAdapter {
     uint256 maintenanceLtvBps;
   }
 
-  /// @notice Prevents callbacks from crossing any controller lifecycle transition.
-  modifier nonReentrantPositionLiquidation() {
-    LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
-    uint8 status = self.reentrancyStatus;
-    if (status != LibDreamMarginConstants.REENTRANCY_UNLOCKED) {
-      revert LibDreamMarginErrors.ReentrantCall(status);
-    }
-    self.reentrancyStatus = LibDreamMarginConstants.REENTRANCY_LOCKED;
-    _;
-    self.reentrancyStatus = LibDreamMarginConstants.REENTRANCY_UNLOCKED;
-  }
-
   /// @notice Liquidates one unhealthy trading position through a caller-bounded route.
   /// @param params Position, payment, execution, output, deadline, and route bounds.
   /// @return repaid Collateral actually received by the vault.
@@ -71,7 +60,7 @@ contract PositionLiquidation is DreamDexAdapter {
   /// @return incentive Genuine collateral surplus paid to the liquidator.
   function liquidate(IDreamMarginController.LiquidationParams calldata params)
     external
-    nonReentrantPositionLiquidation
+    nonReentrant
     returns (uint256 repaid, uint256 seized, uint256 incentive)
   {
     if (params.maxDebtAssets == 0) {

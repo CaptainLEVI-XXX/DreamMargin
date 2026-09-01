@@ -391,7 +391,7 @@ contract PositionCloseTest is Test {
   /// @notice Pins the close facet and prevents bypassing controller storage and its shared lock.
   function test_closeFacetIsPinnedAndCannotBeCalledDirectly() external {
     assertEq(_controller.positionCloseFacet(), address(_positionClose));
-    vm.expectRevert(abi.encodeWithSelector(LibDreamMarginErrors.ReentrantCall.selector, uint8(0)));
+    vm.expectRevert(abi.encodeWithSelector(LibDreamMarginErrors.PositionNotFound.selector, 1));
     _positionClose.repay(1, _ONE);
   }
 

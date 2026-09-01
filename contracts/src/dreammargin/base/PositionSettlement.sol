@@ -16,6 +16,7 @@ import {IERC6909} from "src/interfaces/integrations/IERC6909.sol";
 
 import {LibDreamMarginConstants} from "src/libs/dreammargin/LibDreamMarginConstants.sol";
 import {LibDreamMarginErrors} from "src/libs/dreammargin/LibDreamMarginErrors.sol";
+import {DreamMarginReentrancyGuard} from "src/libs/dreammargin/DreamMarginReentrancyGuard.sol";
 import {
   GenerationConfig,
   LibDreamMarginStorage,
@@ -29,20 +30,8 @@ import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 
 /// @notice Immutable terminal-lifecycle facet reached through explicit controller wrappers.
-contract PositionSettlement is DreamDexAdapter {
+contract PositionSettlement is DreamDexAdapter, DreamMarginReentrancyGuard {
   using SafeTransferLib for address;
-
-  /// @notice Prevents callbacks from crossing any controller lifecycle transition.
-  modifier nonReentrantPositionSettlement() {
-    LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
-    uint8 status = self.reentrancyStatus;
-    if (status != LibDreamMarginConstants.REENTRANCY_UNLOCKED) {
-      revert LibDreamMarginErrors.ReentrantCall(status);
-    }
-    self.reentrancyStatus = LibDreamMarginConstants.REENTRANCY_LOCKED;
-    _;
-    self.reentrancyStatus = LibDreamMarginConstants.REENTRANCY_UNLOCKED;
-  }
 
   /// @notice Redeems one frozen outcome and closes its position after debt-first allocation.
   /// @param positionId Position settled permissionlessly.
@@ -51,7 +40,7 @@ contract PositionSettlement is DreamDexAdapter {
   /// @return badDebt Net loss remaining after actual recovery and funded reserve use.
   function settle(uint256 positionId)
     external
-    nonReentrantPositionSettlement
+    nonReentrant
     returns (uint256 repaid, uint256 ownerAssets, uint256 badDebt)
   {
     LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
@@ -97,11 +86,7 @@ contract PositionSettlement is DreamDexAdapter {
   /// @notice Supplies actual collateral to the vault's non-redeemable first-loss reserve.
   /// @param assets Exact collateral pulled from the caller.
   /// @return reserveShares Non-redeemable reserve shares minted by the vault.
-  function fundReserve(uint256 assets)
-    external
-    nonReentrantPositionSettlement
-    returns (uint256 reserveShares)
-  {
+  function fundReserve(uint256 assets) external nonReentrant returns (uint256 reserveShares) {
     if (assets == 0) revert LibDreamMarginErrors.ZeroAmount(assets);
     IDreamMarginVault vault_ = _vault();
     address asset = vault_.asset();
@@ -116,7 +101,7 @@ contract PositionSettlement is DreamDexAdapter {
 
   /// @notice Supplies actual collateral against cumulative bad debt without restoring receivables.
   /// @param assets Exact collateral pulled from the caller.
-  function recordRecovery(uint256 assets) external nonReentrantPositionSettlement {
+  function recordRecovery(uint256 assets) external nonReentrant {
     if (assets == 0) revert LibDreamMarginErrors.ZeroAmount(assets);
     IDreamMarginVault vault_ = _vault();
     uint256 realized = vault_.realizedBadDebt();

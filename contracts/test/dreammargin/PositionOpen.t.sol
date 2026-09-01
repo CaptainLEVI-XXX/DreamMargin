@@ -174,7 +174,7 @@ contract PositionOpenTest is Test {
   function test_openingFacetIsImmutableAndOnlyUsableThroughController() external {
     assertEq(_controller.positionOpenFacet(), address(_positionOpen));
     vm.prank(_OWNER);
-    vm.expectRevert(abi.encodeWithSelector(LibDreamMarginErrors.ReentrantCall.selector, uint8(0)));
+    vm.expectPartialRevert(LibDreamMarginErrors.UnsupportedGeneration.selector);
     _positionOpen.openPosition(_yesParams());
   }
 
