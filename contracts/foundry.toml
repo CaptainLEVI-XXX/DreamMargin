@@ -57,7 +57,7 @@ no_match_path = "__never_match__"
 runs = 64
 
 [rpc_endpoints]
-somnia_testnet = "https://dream-rpc.somnia.network"
+somnia_testnet = "https://api.infra.testnet.somnia.network"
 somnia_mainnet = "https://api.infra.mainnet.somnia.network"
 
 [fmt]
