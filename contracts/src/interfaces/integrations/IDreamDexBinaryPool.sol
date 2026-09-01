@@ -32,7 +32,7 @@ interface IDreamDexBinaryPool {
   /// @param yesId ERC-6909 ID for the current YES outcome.
   /// @param noId ERC-6909 ID for the current NO outcome.
   /// @param oneCollateral One whole collateral token in raw units.
-  /// @param setBacking Collateral backing one complete outcome set.
+  /// @param setBacking Total live collateral backing all outstanding complete sets.
   /// @param feeRecipient Account receiving venue fees.
   /// @param makerFeeBpsTimes1k Maker fee in basis points times one thousand.
   /// @param takerFeeBpsTimes1k Taker fee in basis points times one thousand.

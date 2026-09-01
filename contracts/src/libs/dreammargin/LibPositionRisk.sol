@@ -382,7 +382,7 @@ library LibPositionRisk {
   /// @param quantity Held outcome quantity.
   /// @param direct Same-side bid walk.
   /// @param oppositeAsk Opposite-side ask walk for a complete-set hedge.
-  /// @param completeSetBacking Gross collateral backing `oneOutcome` complete set.
+  /// @param completeSetPayout Gross collateral paid by one `oneOutcome` complete set.
   /// @param mergeFeeBps Complete-set merge and settlement cost in basis points.
   /// @param conservativeTwap Mature time-weighted unit mark.
   /// @param collateralFactorBps TWAP haircut in basis points.
@@ -392,7 +392,7 @@ library LibPositionRisk {
     uint256 quantity,
     BookWalk memory direct,
     BookWalk memory oppositeAsk,
-    uint256 completeSetBacking,
+    uint256 completeSetPayout,
     uint256 mergeFeeBps,
     uint256 conservativeTwap,
     uint256 collateralFactorBps,
@@ -406,7 +406,7 @@ library LibPositionRisk {
     }
     recovery.directRecovery = direct.complete ? direct.value : 0;
     if (oppositeAsk.complete) {
-      uint256 gross = collateralValueDown(quantity, completeSetBacking, oneOutcome);
+      uint256 gross = collateralValueDown(quantity, completeSetPayout, oneOutcome);
       uint256 fee = FixedPointMathLib.fullMulDivUp(gross, mergeFeeBps, LibDreamMarginConstants.BPS);
       uint256 cost = oppositeAsk.value + fee;
       recovery.hedgeRecovery = gross > cost ? gross - cost : 0;

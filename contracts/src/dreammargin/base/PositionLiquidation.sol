@@ -404,7 +404,7 @@ contract PositionLiquidation is DreamDexAdapter, DreamMarginReentrancyGuard {
       position.shares,
       book.direct,
       book.opposite,
-      info.setBacking,
+      info.oneCollateral,
       settlementFeeBps,
       mark,
       config.risk.collateralFactorBps,

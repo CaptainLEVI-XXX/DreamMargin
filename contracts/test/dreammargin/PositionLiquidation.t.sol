@@ -272,6 +272,24 @@ contract PositionLiquidationTest is Test {
     _assertPosition(positionId, 0, 0, PositionStatus.CLOSED);
   }
 
+  /// @notice Prevents total pool backing from inflating per-set hedge recovery.
+  function test_totalSetBackingCannotMaskLiquidation() external {
+    uint256 positionId = _open();
+    IDreamDexBinaryPool.BinaryPoolInfo memory info = _pool.getBinaryPoolParams();
+    info.setBacking = 1_500 * _ONE;
+    _pool.recycle(info, _pool.marketExpiryNs());
+    _makeUnhealthy(300_000);
+
+    vm.prank(_LIQUIDATOR);
+    (uint256 repaid, uint256 seized, uint256 incentive) =
+      _controller.liquidate(_sale(positionId, 10 * _ONE, 300_000));
+
+    assertEq(repaid, 10 * _ONE);
+    assertEq(seized, 40 * _ONE);
+    assertEq(incentive, 500_000);
+    _assertPosition(positionId, 0, 0, PositionStatus.CLOSED);
+  }
+
   /// @notice Uses actual IOC sale deltas and releases no value while partial debt remains.
   function test_directSalePartialFillRestoresHealthDebtFirst() external {
     uint256 positionId = _open();

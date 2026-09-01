@@ -322,9 +322,6 @@ abstract contract DreamDexAdapter {
     if (info.oneCollateral == 0) {
       revert LibDreamMarginErrors.ValueOutOfBounds("ONE_COLLATERAL", 0, type(uint256).max);
     }
-    if (info.setBacking == 0) {
-      revert LibDreamMarginErrors.ValueOutOfBounds("SET_BACKING", 0, type(uint256).max);
-    }
     IDreamDexBinaryPool.BookLevel[] memory bids = pool.getBookLevels(true, maxBookLevels);
     IDreamDexBinaryPool.BookLevel[] memory asks = pool.getBookLevels(false, maxBookLevels);
     if (bids.length != 0 && asks.length != 0 && bids[0].price >= asks[0].price) {
