@@ -295,6 +295,40 @@ contract DreamMarginControllerAdminTest is Test {
     assertEq(uint8(_controller.protocolMode()), uint8(ProtocolMode.ACTIVE));
   }
 
+  /// @notice Releases reserve only from paused mode through an exact delayed commitment.
+  function test_reserveWithdrawalRequiresPausedDelayedExecution() external {
+    uint256 assets = 100 * _ONE;
+    _collateral.mint(_GOVERNANCE, assets);
+    vm.startPrank(_GOVERNANCE);
+    _collateral.approve(address(_controller), assets);
+    _controller.fundReserve(assets);
+    vm.stopPrank();
+
+    bytes32 changeId = keccak256("reserve-withdrawal");
+    bytes32 payload = keccak256(abi.encode(_controller.executeReserveWithdrawal.selector, assets));
+    _schedule(changeId, payload);
+    vm.warp(_START + 1 days);
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        LibDreamMarginErrors.ActionBlocked.selector,
+        uint8(ProtocolMode.ACTIVE),
+        _controller.executeReserveWithdrawal.selector
+      )
+    );
+    _controller.executeReserveWithdrawal(changeId, assets);
+
+    vm.prank(_GUARDIAN);
+    _controller.setEmergencyMode(ProtocolMode.PAUSED);
+    uint256 recipientBefore = _collateral.balanceOf(_FEE_RECIPIENT);
+    uint256 burned = _controller.executeReserveWithdrawal(changeId, assets);
+
+    assertGt(burned, 0);
+    assertEq(_collateral.balanceOf(_FEE_RECIPIENT), recipientBefore + assets);
+    assertEq(_vault.protocolReserve(), 0);
+    assertEq(_vault.lockedReserve(), 0);
+    assertEq(_vault.protocolReserveShares(), 0);
+  }
+
   /// @notice Registers one exact generation and its immutable oracle policy after delay.
   function test_generationRegistrationBindsControllerAndOraclePolicies() external {
     GenerationConfig memory generation = _generationConfig();

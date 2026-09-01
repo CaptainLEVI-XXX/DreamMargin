@@ -435,6 +435,26 @@ abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapt
     emit ProtocolModeUpdated(previous, mode, msg.sender);
   }
 
+  /// @inheritdoc IDreamMarginController
+  function executeReserveWithdrawal(bytes32 changeId, uint256 assets)
+    external
+    returns (uint256 reserveSharesBurned)
+  {
+    if (assets == 0) revert LibDreamMarginErrors.ZeroAmount(assets);
+    LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
+    if (self.mode != ProtocolMode.PAUSED) {
+      revert LibDreamMarginErrors.ActionBlocked(
+        uint8(self.mode), this.executeReserveWithdrawal.selector
+      );
+    }
+    bytes32 payloadHash = keccak256(abi.encode(this.executeReserveWithdrawal.selector, assets));
+    _consumeChange(changeId, payloadHash);
+    reserveSharesBurned = IDreamMarginVault(_VAULT).withdrawReserve(assets, _FEE_RECIPIENT);
+    // The vault's transient lock rejects callback reentry into every vault-mutating path.
+    // forge-lint: disable-next-line(reentrancy-events)
+    emit ProtocolReserveWithdrawn(_FEE_RECIPIENT, assets, reserveSharesBurned);
+  }
+
   /// @notice Verifies and consumes one mature exact payload commitment.
   /// @param changeId Pending change identifier.
   /// @param actualHash Hash of the supplied execution selector and arguments.

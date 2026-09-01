@@ -253,18 +253,19 @@ contract DreamMarginSystemHandler is Test {
     require(!initialized, "ALREADY_INITIALIZED");
     initialized = true;
     _fundAndApprove();
+    controller.fundReserve(20 * ONE);
     _registerGeneration(activeGenerationKey, _activeKey, activeMarketGroup, "REGISTER_ACTIVE");
     _registerGeneration(
       terminalGenerationKey, _terminalKey, terminalMarketGroup, "REGISTER_TERMINAL"
     );
-    vm.warp(block.timestamp + GOVERNANCE_DELAY);
+    vm.warp(vm.getBlockTimestamp() + GOVERNANCE_DELAY);
     _executeRegistration(activeGenerationKey, _activeKey, activeMarketGroup, "REGISTER_ACTIVE");
     _executeRegistration(
       terminalGenerationKey, _terminalKey, terminalMarketGroup, "REGISTER_TERMINAL"
     );
     oracle.observe(activeGenerationKey);
     oracle.observe(terminalGenerationKey);
-    vm.warp(block.timestamp + 60);
+    vm.warp(vm.getBlockTimestamp() + 60);
     oracle.observe(activeGenerationKey);
     oracle.observe(terminalGenerationKey);
 
@@ -275,12 +276,12 @@ contract DreamMarginSystemHandler is Test {
 
     uint256 liquidated = _open(_activeKey, activeGenerationKey);
     _setActiveBook(400_000);
-    vm.warp(block.timestamp + 30);
+    vm.warp(vm.getBlockTimestamp() + 30);
     oracle.observe(activeGenerationKey);
     controller.liquidate(_take(liquidated, 7 * ONE));
     ++successfulLiquidations;
     _setActiveBook(_STABLE_BID);
-    vm.warp(block.timestamp + 30);
+    vm.warp(vm.getBlockTimestamp() + 30);
     oracle.observe(activeGenerationKey);
 
     uint256 terminal = _open(_terminalKey, terminalGenerationKey);
@@ -295,6 +296,7 @@ contract DreamMarginSystemHandler is Test {
 
     _provePauseSafety(first);
     _proveUnauthorized(first);
+    _restoreActiveMode();
   }
 
   /// @notice Opens a standard bounded 2x position when current state permits it.
@@ -382,7 +384,7 @@ contract DreamMarginSystemHandler is Test {
     uint256 choice = seed % 3;
     uint256 bid = choice == 0 ? 400_000 : choice == 1 ? 450_000 : _STABLE_BID;
     _setActiveBook(bid);
-    vm.warp(block.timestamp + 30);
+    vm.warp(vm.getBlockTimestamp() + 30);
     try oracle.observe(activeGenerationKey) {} catch {}
   }
 
@@ -587,6 +589,20 @@ contract DreamMarginSystemHandler is Test {
     } catch {
       ++unauthorizedRejections;
     }
+  }
+
+  /// @notice Restores active mode through delayed governance and refreshes the mark window.
+  function _restoreActiveMode() private {
+    bytes32 changeId = keccak256("RESTORE_ACTIVE");
+    bytes32 payload =
+      keccak256(abi.encode(controller.executeModeChange.selector, ProtocolMode.ACTIVE));
+    controller.scheduleChange(changeId, payload);
+    vm.warp(vm.getBlockTimestamp() + GOVERNANCE_DELAY);
+    controller.executeModeChange(changeId, ProtocolMode.ACTIVE);
+    _setActiveBook(_STABLE_BID);
+    oracle.observe(activeGenerationKey);
+    vm.warp(vm.getBlockTimestamp() + 60);
+    oracle.observe(activeGenerationKey);
   }
 
   /// @notice Verifies every accepted venue write used the immediate bounded adapter shape.

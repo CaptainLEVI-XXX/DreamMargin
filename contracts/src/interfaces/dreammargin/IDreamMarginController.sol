@@ -57,6 +57,14 @@ interface IDreamMarginController {
   /// @param payloadHash Verified execution payload hash.
   event ChangeExecuted(bytes32 indexed changeId, bytes32 indexed payloadHash);
 
+  /// @notice Emitted when delayed governance releases demonstrably excess reserve capital.
+  /// @param recipient Immutable protocol fee recipient receiving the assets.
+  /// @param assets Reserve assets released.
+  /// @param reserveSharesBurned Locked reserve shares burned.
+  event ProtocolReserveWithdrawn(
+    address indexed recipient, uint256 assets, uint256 reserveSharesBurned
+  );
+
   /// @notice Returns the immutable DreamDEX module.
   /// @return module_ Bound module address.
   function module() external view returns (address module_);
@@ -154,6 +162,15 @@ interface IDreamMarginController {
   /// @param changeId Scheduled change identifier.
   /// @param mode Target operating mode.
   function executeModeChange(bytes32 changeId, ProtocolMode mode) external;
+
+  /// @notice Executes a committed reserve release while paused and fully debt-free.
+  /// @param changeId Scheduled change identifier.
+  /// @param assets Exact reserve assets sent to the immutable fee recipient.
+  /// @return reserveSharesBurned Non-redeemable reserve shares burned by the vault.
+  function executeReserveWithdrawal(bytes32 changeId, uint256 assets)
+    external
+    returns (uint256 reserveSharesBurned);
+
   /// @notice Direct-sale and collateral-take liquidation routes supported by the MVP.
   enum LiquidationRoute {
     COLLATERAL_TAKE,

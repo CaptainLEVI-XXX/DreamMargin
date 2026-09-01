@@ -528,6 +528,60 @@ contract DreamMarginVault is IDreamMarginVault, DreamMarginReentrancyGuard {
   }
 
   /// @inheritdoc IDreamMarginVault
+  function withdrawReserve(uint256 assets, address receiver)
+    external
+    nonReentrant
+    onlyController
+    returns (uint256 reserveSharesBurned)
+  {
+    _nonzeroAmount(assets);
+    _nonzeroAddress(receiver, "RESERVE_RECEIVER");
+    LibDreamMarginVaultStorage.State storage self = LibDreamMarginVaultStorage.get();
+    _accrue();
+
+    uint256 debtShares = self.totalDebtShares;
+    uint256 unrecoveredLoss = self.realizedBadDebt > self.recoveredBadDebt
+      ? self.realizedBadDebt - self.recoveredBadDebt
+      : 0;
+    if (debtShares != 0 || unrecoveredLoss != 0) {
+      revert LibDreamMarginErrors.ReserveWithdrawalBlocked(debtShares, unrecoveredLoss);
+    }
+
+    uint256 assetsBefore = self.internalCash;
+    uint256 reserveCapacity = LibPositionRisk.vaultAssetsDown(
+      self.protocolReserveShares, self.totalSupply, assetsBefore, _VIRTUAL_SHARES, _VIRTUAL_ASSETS
+    );
+    uint256 available = FixedPointMathLib.min(self.protocolReserve, reserveCapacity);
+    available = FixedPointMathLib.min(available, assetsBefore);
+    if (available < self.protocolReserve && self.protocolReserveShares != 0) {
+      uint256 partialCapacity = LibPositionRisk.vaultAssetsDown(
+        self.protocolReserveShares - 1,
+        self.totalSupply,
+        assetsBefore,
+        _VIRTUAL_SHARES,
+        _VIRTUAL_ASSETS
+      );
+      available = FixedPointMathLib.min(available, partialCapacity);
+    }
+    if (assets > available) {
+      revert LibDreamMarginErrors.InsufficientLiquidity(available, assets);
+    }
+
+    reserveSharesBurned = assets == self.protocolReserve
+      ? self.protocolReserveShares
+      : LibPositionRisk.vaultSharesUp(
+        assets, self.totalSupply, assetsBefore, _VIRTUAL_SHARES, _VIRTUAL_ASSETS
+      );
+    self.protocolReserve -= assets;
+    self.lockedReserve -= assets;
+    self.protocolReserveShares -= reserveSharesBurned;
+    self.internalCash -= assets;
+    _burnShares(self, address(this), reserveSharesBurned);
+    _sendExact(receiver, assets);
+    emit ReserveWithdrawn(receiver, assets, reserveSharesBurned);
+  }
+
+  /// @inheritdoc IDreamMarginVault
   function recordRecovery(uint256 assets) external nonReentrant onlyController {
     _nonzeroAmount(assets);
     _receiveExact(msg.sender, assets);
@@ -623,10 +677,11 @@ contract DreamMarginVault is IDreamMarginVault, DreamMarginReentrancyGuard {
     reserveUsed = FixedPointMathLib.min(reserveUsed, reserveCapacity);
     if (reserveUsed == 0) return (0, 0);
 
-    reserveSharesBurned = LibPositionRisk.vaultSharesUp(
-      reserveUsed, self.totalSupply, assetsBeforeLoss, _VIRTUAL_SHARES, _VIRTUAL_ASSETS
-    );
-    reserveSharesBurned = FixedPointMathLib.min(reserveSharesBurned, self.protocolReserveShares);
+    reserveSharesBurned = reserveUsed == self.protocolReserve
+      ? self.protocolReserveShares
+      : LibPositionRisk.vaultSharesUp(
+        reserveUsed, self.totalSupply, assetsBeforeLoss, _VIRTUAL_SHARES, _VIRTUAL_ASSETS
+      );
     self.protocolReserve -= reserveUsed;
     self.lockedReserve -= reserveUsed;
     self.protocolReserveShares -= reserveSharesBurned;

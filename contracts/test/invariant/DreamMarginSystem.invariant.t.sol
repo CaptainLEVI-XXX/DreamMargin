@@ -30,7 +30,18 @@ contract DreamMarginSystemInvariantTest is StdInvariant, Test {
   function setUp() external {
     _handler = new DreamMarginSystemHandler();
     _handler.initialize();
+    bytes4[] memory selectors = new bytes4[](9);
+    selectors[0] = _handler.actOpen.selector;
+    selectors[1] = _handler.actManage.selector;
+    selectors[2] = _handler.actExit.selector;
+    selectors[3] = _handler.actMark.selector;
+    selectors[4] = _handler.actLiquidate.selector;
+    selectors[5] = _handler.actVault.selector;
+    selectors[6] = _handler.actRecovery.selector;
+    selectors[7] = _handler.actRecycle.selector;
+    selectors[8] = _handler.actUnauthorized.selector;
     targetContract(address(_handler));
+    targetSelector(FuzzSelector({addr: address(_handler), selectors: selectors}));
   }
 
   /// @notice DM-I1: live position debt equals every controller and vault debt bucket.
@@ -156,6 +167,16 @@ contract DreamMarginSystemInvariantTest is StdInvariant, Test {
     assertGe(
       _handler.collateral().balanceOf(address(_handler.vault())), _handler.vault().internalCash()
     );
+    assertEq(_handler.vault().lockedReserve(), _handler.vault().protocolReserve());
+    assertEq(
+      _handler.vault().protocolReserveShares(),
+      _handler.vault().balanceOf(address(_handler.vault()))
+    );
+    assertGe(_handler.vault().internalCash(), _handler.vault().lockedReserve());
+    assertEq(
+      _handler.vault().availableLiquidity(),
+      _handler.vault().internalCash() - _handler.vault().lockedReserve()
+    );
   }
 
   /// @notice DM-I11: recoveries are final and cannot recreate a receivable.
@@ -185,7 +206,7 @@ contract DreamMarginSystemInvariantTest is StdInvariant, Test {
   function invariant_I14_pauseSafety() external view {
     assertFalse(_handler.pauseSafetyViolation());
     assertGt(_handler.pauseSafetyProofs(), 0);
-    assertEq(uint8(_handler.controller().protocolMode()), uint8(ProtocolMode.PAUSED));
+    assertEq(uint8(_handler.controller().protocolMode()), uint8(ProtocolMode.ACTIVE));
   }
 
   /// @notice DM-I15: closed positions stay permanently zeroed.

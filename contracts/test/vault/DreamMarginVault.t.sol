@@ -327,6 +327,8 @@ contract DreamMarginVaultTest is Test {
     vm.expectRevert(expected);
     _vault.fundReserve(1);
     vm.expectRevert(expected);
+    _vault.withdrawReserve(1, _ALICE);
+    vm.expectRevert(expected);
     _vault.recordRecovery(1);
     vm.stopPrank();
   }
@@ -346,6 +348,39 @@ contract DreamMarginVaultTest is Test {
     assertEq(_vault.totalAssets(), 200 * _UNIT);
     assertEq(_vault.availableLiquidity(), 100 * _UNIT);
     assertEq(_vault.maxWithdraw(_ALICE), 100 * _UNIT);
+  }
+
+  /// @notice Releases only recovered debt-free reserve and burns its complete self-owned claim.
+  function test_reserveWithdrawalRequiresDebtAndLossClearance() external {
+    _depositAs(_ALICE, 1_000 * _UNIT);
+    _vault.fundReserve(200 * _UNIT);
+    uint256 debtShares = _vault.borrow(100 * _UNIT, address(this));
+
+    vm.expectRevert(
+      abi.encodeWithSelector(LibDreamMarginErrors.ReserveWithdrawalBlocked.selector, debtShares, 0)
+    );
+    _vault.withdrawReserve(100 * _UNIT, _BOB);
+
+    _vault.writeOff(debtShares);
+    vm.expectRevert(
+      abi.encodeWithSelector(LibDreamMarginErrors.ReserveWithdrawalBlocked.selector, 0, 100 * _UNIT)
+    );
+    _vault.withdrawReserve(100 * _UNIT, _BOB);
+
+    _vault.recordRecovery(100 * _UNIT);
+    uint256 receiverBefore = _asset.balanceOf(_BOB);
+    uint256 supplyBefore = _vault.totalSupply();
+    uint256 reserveShares = _vault.protocolReserveShares();
+    uint256 burned = _vault.withdrawReserve(100 * _UNIT, _BOB);
+
+    assertEq(burned, reserveShares);
+    assertEq(_asset.balanceOf(_BOB), receiverBefore + 100 * _UNIT);
+    assertEq(_vault.protocolReserve(), 0);
+    assertEq(_vault.lockedReserve(), 0);
+    assertEq(_vault.protocolReserveShares(), 0);
+    assertEq(_vault.balanceOf(address(_vault)), 0);
+    assertEq(_vault.totalSupply(), supplyBefore - burned);
+    assertEq(_vault.availableLiquidity(), _vault.internalCash());
   }
 
   /// @notice Burns junior reserve shares so a covered loss preserves senior LP value.

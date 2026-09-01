@@ -311,6 +311,11 @@ library LibDreamMarginErrors {
   /// @param requested Recovery assets supplied by the caller.
   error RecoveryExceedsLoss(uint256 available, uint256 requested);
 
+  /// @notice Raised when reserve release is attempted while debt or unrecovered loss remains.
+  /// @param debtShares Outstanding vault debt shares.
+  /// @param unrecoveredLoss Realized bad debt not yet recovered.
+  error ReserveWithdrawalBlocked(uint256 debtShares, uint256 unrecoveredLoss);
+
   /// @notice Raised when a delayed change is executed before its activation time.
   /// @param changeId Identifier of the pending change.
   /// @param executableAt Earliest execution timestamp.

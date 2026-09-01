@@ -61,6 +61,12 @@ interface IDreamMarginVault {
   /// @param reserveShares Non-redeemable shares minted to the vault.
   event ReserveFunded(uint256 assets, uint256 reserveShares);
 
+  /// @notice Emitted when demonstrably excess first-loss capital is released.
+  /// @param receiver Account receiving reserve assets.
+  /// @param assets Reserve assets transferred.
+  /// @param reserveSharesBurned Non-redeemable reserve shares burned.
+  event ReserveWithdrawn(address indexed receiver, uint256 assets, uint256 reserveSharesBurned);
+
   /// @notice Emitted when a receivable is removed and reserve capital is consumed.
   /// @param assetsWrittenOff Receivable removed.
   /// @param reserveUsed Funded reserve applied.
@@ -329,10 +335,18 @@ interface IDreamMarginVault {
     external
     returns (uint256 assetsRepaid, uint256 assetsWrittenOff, uint256 reserveUsed);
 
-  /// @notice Pulls controller assets into the non-redeemable first-loss reserve.
+  /// @notice Pulls controller assets into the governance-locked first-loss reserve.
   /// @param assets Reserve assets transferred in asset native units.
-  /// @return reserveShares Non-redeemable shares minted to the vault itself.
+  /// @return reserveShares Locked shares minted to the vault itself.
   function fundReserve(uint256 assets) external returns (uint256 reserveShares);
+
+  /// @notice Releases reserve capital only after debt and every realized loss are cleared.
+  /// @param assets Reserve assets transferred in asset native units.
+  /// @param receiver Account receiving the released reserve.
+  /// @return reserveSharesBurned Locked shares burned from the vault.
+  function withdrawReserve(uint256 assets, address receiver)
+    external
+    returns (uint256 reserveSharesBurned);
 
   /// @notice Records collateral actually recovered after an earlier write-off.
   /// @param assets Recovered collateral transferred in asset native units.

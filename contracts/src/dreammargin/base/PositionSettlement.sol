@@ -83,9 +83,9 @@ contract PositionSettlement is DreamDexAdapter, DreamMarginReentrancyGuard {
     // forge-lint: disable-end(reentrancy-events)
   }
 
-  /// @notice Supplies actual collateral to the vault's non-redeemable first-loss reserve.
+  /// @notice Supplies actual collateral to the vault's governance-locked first-loss reserve.
   /// @param assets Exact collateral pulled from the caller.
-  /// @return reserveShares Non-redeemable reserve shares minted by the vault.
+  /// @return reserveShares Locked reserve shares minted by the vault.
   function fundReserve(uint256 assets) external nonReentrant returns (uint256 reserveShares) {
     if (assets == 0) revert LibDreamMarginErrors.ZeroAmount(assets);
     IDreamMarginVault vault_ = _vault();
