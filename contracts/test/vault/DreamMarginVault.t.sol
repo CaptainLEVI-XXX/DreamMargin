@@ -322,6 +322,8 @@ contract DreamMarginVaultTest is Test {
     vm.expectRevert(expected);
     _vault.writeOff(1);
     vm.expectRevert(expected);
+    _vault.settleDebt(1, 0);
+    vm.expectRevert(expected);
     _vault.fundReserve(1);
     vm.expectRevert(expected);
     _vault.recordRecovery(1);
@@ -405,6 +407,58 @@ contract DreamMarginVaultTest is Test {
     assertEq(_vault.performingDebt(), 0);
     assertEq(_vault.totalDebtShares(), 0);
     assertEq(_vault.totalAssets(), 850 * _UNIT);
+  }
+
+  /// @notice Applies terminal collateral before removing only the unrecovered receivable.
+  function test_terminalSettlementWritesOffOnlyActualShortfall() external {
+    _depositAs(_ALICE, 1_000 * _UNIT);
+    uint256 debtShares = _vault.borrow(200 * _UNIT, address(this));
+
+    (uint256 repaid, uint256 writtenOff, uint256 reserveUsed) =
+      _vault.settleDebt(debtShares, 50 * _UNIT);
+
+    assertEq(repaid, 50 * _UNIT);
+    assertEq(writtenOff, 150 * _UNIT);
+    assertEq(reserveUsed, 0);
+    assertEq(_vault.internalCash(), 850 * _UNIT);
+    assertEq(_vault.performingDebt(), 0);
+    assertEq(_vault.totalDebtShares(), 0);
+    assertEq(_vault.realizedBadDebt(), 150 * _UNIT);
+    assertEq(_vault.totalAssets(), 850 * _UNIT);
+  }
+
+  /// @notice Pulls no more terminal collateral than the exact marginal receivable.
+  function test_terminalSettlementLeavesExcessRecoveryWithController() external {
+    _depositAs(_ALICE, 1_000 * _UNIT);
+    uint256 debtShares = _vault.borrow(200 * _UNIT, address(this));
+    uint256 controllerBalanceBefore = _asset.balanceOf(address(this));
+
+    (uint256 repaid, uint256 writtenOff, uint256 reserveUsed) =
+      _vault.settleDebt(debtShares, 300 * _UNIT);
+
+    assertEq(repaid, 200 * _UNIT);
+    assertEq(writtenOff, 0);
+    assertEq(reserveUsed, 0);
+    assertEq(_asset.balanceOf(address(this)), controllerBalanceBefore - 200 * _UNIT);
+    assertEq(_vault.totalAssets(), 1_000 * _UNIT);
+  }
+
+  /// @notice Burns junior reserve shares only against the post-recovery shortfall.
+  function test_terminalSettlementConsumesReserveAfterRecovery() external {
+    uint256 aliceShares = _depositAs(_ALICE, 1_000 * _UNIT);
+    _vault.fundReserve(100 * _UNIT);
+    uint256 debtShares = _vault.borrow(200 * _UNIT, address(this));
+
+    (uint256 repaid, uint256 writtenOff, uint256 reserveUsed) =
+      _vault.settleDebt(debtShares, 50 * _UNIT);
+
+    assertEq(repaid, 50 * _UNIT);
+    assertEq(writtenOff, 150 * _UNIT);
+    assertEq(reserveUsed, 100 * _UNIT);
+    assertEq(_vault.protocolReserve(), 0);
+    assertEq(_vault.realizedBadDebt(), 150 * _UNIT);
+    assertEq(_vault.convertToAssets(aliceShares), 950 * _UNIT);
+    assertEq(_vault.totalAssets(), 950 * _UNIT);
   }
 
   // -------------------------------------------------------------------------

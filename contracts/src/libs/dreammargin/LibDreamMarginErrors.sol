@@ -169,6 +169,12 @@ library LibDreamMarginErrors {
   /// @param outcomeId Exact outcome ID whose approval failed.
   error TokenApprovalFailed(address token, address spender, uint256 outcomeId);
 
+  /// @notice Raised when a temporary ERC-6909 operator change reports failure.
+  /// @param token ERC-6909 outcome-token contract.
+  /// @param operator Pinned settlement contract.
+  /// @param approved Requested operator state.
+  error TokenOperatorApprovalFailed(address token, address operator, bool approved);
+
   /// @notice Raised when an owner has not granted enough exact-ID outcome allowance.
   /// @param token ERC-6909 outcome-token contract.
   /// @param outcomeId Exact outcome ID required.
@@ -303,6 +309,11 @@ library LibDreamMarginErrors {
   /// @notice Raised when the same receivable would be written off more than once.
   /// @param positionId Position whose loss was already finalized.
   error LossAlreadyRecognized(uint256 positionId);
+
+  /// @notice Raised when a recovery exceeds cumulative loss not already recovered.
+  /// @param available Unrecovered cumulative bad debt.
+  /// @param requested Recovery assets supplied by the caller.
+  error RecoveryExceedsLoss(uint256 available, uint256 requested);
 
   /// @notice Raised when a delayed change is executed before its activation time.
   /// @param changeId Identifier of the pending change.

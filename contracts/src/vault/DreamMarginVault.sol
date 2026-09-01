@@ -468,31 +468,48 @@ contract DreamMarginVault is IDreamMarginVault {
       remainingShares == 0 ? 0 : LibPositionRisk.debtAssetsUp(remainingShares, self.debtIndexWad);
     assetsWrittenOff = self.performingDebt + self.collectibleInterest - nextReceivable;
 
-    uint256 reserveCapacity = LibPositionRisk.vaultAssetsDown(
-      self.protocolReserveShares,
-      self.totalSupply,
-      assetsBeforeLoss,
-      _VIRTUAL_SHARES,
-      _VIRTUAL_ASSETS
-    );
-    reserveUsed = FixedPointMathLib.min(assetsWrittenOff, self.protocolReserve);
-    reserveUsed = FixedPointMathLib.min(reserveUsed, reserveCapacity);
-    uint256 reserveSharesBurned = 0;
-    if (reserveUsed != 0) {
-      reserveSharesBurned = LibPositionRisk.vaultSharesUp(
-        reserveUsed, self.totalSupply, assetsBeforeLoss, _VIRTUAL_SHARES, _VIRTUAL_ASSETS
-      );
-      reserveSharesBurned = FixedPointMathLib.min(reserveSharesBurned, self.protocolReserveShares);
-      self.protocolReserve -= reserveUsed;
-      self.lockedReserve -= reserveUsed;
-      self.protocolReserveShares -= reserveSharesBurned;
-      _burnShares(self, address(this), reserveSharesBurned);
-    }
+    uint256 reserveSharesBurned;
+    (reserveUsed, reserveSharesBurned) = _consumeReserve(self, assetsWrittenOff, assetsBeforeLoss);
 
     self.totalDebtShares = remainingShares;
     _reduceReceivable(self, assetsWrittenOff);
     self.realizedBadDebt += assetsWrittenOff;
     emit DebtWrittenOff(assetsWrittenOff, reserveUsed, reserveSharesBurned);
+  }
+
+  /// @inheritdoc IDreamMarginVault
+  function settleDebt(uint256 debtShares, uint256 maxRecoveryAssets)
+    external
+    nonReentrant
+    onlyController
+    returns (uint256 assetsRepaid, uint256 assetsWrittenOff, uint256 reserveUsed)
+  {
+    _nonzeroAmount(debtShares);
+    LibDreamMarginVaultStorage.State storage self = LibDreamMarginVaultStorage.get();
+    _accrue();
+    uint256 outstandingShares = self.totalDebtShares;
+    if (debtShares > outstandingShares) {
+      revert LibDreamMarginErrors.InsufficientDebtShares(outstandingShares, debtShares);
+    }
+
+    uint256 oldReceivable = self.performingDebt + self.collectibleInterest;
+    uint256 assetsBeforeLoss = self.internalCash + oldReceivable;
+    uint256 remainingShares = outstandingShares - debtShares;
+    uint256 nextReceivable =
+      remainingShares == 0 ? 0 : LibPositionRisk.debtAssetsUp(remainingShares, self.debtIndexWad);
+    uint256 positionReceivable = oldReceivable - nextReceivable;
+    assetsRepaid = FixedPointMathLib.min(maxRecoveryAssets, positionReceivable);
+    if (assetsRepaid != 0) {
+      _receiveExact(msg.sender, assetsRepaid);
+      self.internalCash += assetsRepaid;
+    }
+    self.totalDebtShares = remainingShares;
+    _reduceReceivable(self, positionReceivable);
+    assetsWrittenOff = positionReceivable - assetsRepaid;
+    uint256 reserveSharesBurned;
+    (reserveUsed, reserveSharesBurned) = _consumeReserve(self, assetsWrittenOff, assetsBeforeLoss);
+    self.realizedBadDebt += assetsWrittenOff;
+    emit DebtSettled(debtShares, assetsRepaid, assetsWrittenOff, reserveUsed, reserveSharesBurned);
   }
 
   /// @inheritdoc IDreamMarginVault
@@ -590,6 +607,38 @@ contract DreamMarginVault is IDreamMarginVault {
       self.collectibleInterest = 0;
       self.performingDebt -= assets - interest;
     }
+  }
+
+  /// @notice Applies funded junior reserve capacity to a realized loss.
+  /// @param self Vault namespace.
+  /// @param lossAssets Receivable shortfall in asset native units.
+  /// @param assetsBeforeLoss Vault assets immediately before loss recognition.
+  /// @return reserveUsed Reserve assets allocated to the loss.
+  /// @return reserveSharesBurned Junior reserve shares burned.
+  function _consumeReserve(
+    LibDreamMarginVaultStorage.State storage self,
+    uint256 lossAssets,
+    uint256 assetsBeforeLoss
+  ) private returns (uint256 reserveUsed, uint256 reserveSharesBurned) {
+    uint256 reserveCapacity = LibPositionRisk.vaultAssetsDown(
+        self.protocolReserveShares,
+        self.totalSupply,
+        assetsBeforeLoss,
+        _VIRTUAL_SHARES,
+        _VIRTUAL_ASSETS
+      );
+    reserveUsed = FixedPointMathLib.min(lossAssets, self.protocolReserve);
+    reserveUsed = FixedPointMathLib.min(reserveUsed, reserveCapacity);
+    if (reserveUsed == 0) return (0, 0);
+
+    reserveSharesBurned = LibPositionRisk.vaultSharesUp(
+      reserveUsed, self.totalSupply, assetsBeforeLoss, _VIRTUAL_SHARES, _VIRTUAL_ASSETS
+    );
+    reserveSharesBurned = FixedPointMathLib.min(reserveSharesBurned, self.protocolReserveShares);
+    self.protocolReserve -= reserveUsed;
+    self.lockedReserve -= reserveUsed;
+    self.protocolReserveShares -= reserveSharesBurned;
+    _burnShares(self, address(this), reserveSharesBurned);
   }
 
   /// @notice Mints shares and emits the ERC-20 transfer event.

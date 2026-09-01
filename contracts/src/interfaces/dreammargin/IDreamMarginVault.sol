@@ -67,6 +67,20 @@ interface IDreamMarginVault {
   /// @param reserveSharesBurned Non-redeemable shares burned.
   event DebtWrittenOff(uint256 assetsWrittenOff, uint256 reserveUsed, uint256 reserveSharesBurned);
 
+  /// @notice Emitted when terminal recovery retires debt and realizes only the shortfall.
+  /// @param debtShares Debt shares removed from performing receivables.
+  /// @param assetsRepaid Actual terminal collateral received.
+  /// @param assetsWrittenOff Unrecovered receivable removed.
+  /// @param reserveUsed Funded reserve applied to the shortfall.
+  /// @param reserveSharesBurned Non-redeemable shares burned.
+  event DebtSettled(
+    uint256 debtShares,
+    uint256 assetsRepaid,
+    uint256 assetsWrittenOff,
+    uint256 reserveUsed,
+    uint256 reserveSharesBurned
+  );
+
   /// @notice Emitted when assets arrive after an earlier write-off.
   /// @param assets Assets actually recovered.
   event RecoveryRecorded(uint256 assets);
@@ -304,6 +318,16 @@ interface IDreamMarginVault {
   function writeOff(uint256 debtShares)
     external
     returns (uint256 assetsWrittenOff, uint256 reserveUsed);
+
+  /// @notice Retires terminal debt using actual recovery before realizing the shortfall.
+  /// @param debtShares Exact position debt shares removed.
+  /// @param maxRecoveryAssets Maximum available collateral supplied against the receivable.
+  /// @return assetsRepaid Actual collateral received.
+  /// @return assetsWrittenOff Remaining receivable removed after recovery.
+  /// @return reserveUsed Funded reserve applied to the shortfall.
+  function settleDebt(uint256 debtShares, uint256 maxRecoveryAssets)
+    external
+    returns (uint256 assetsRepaid, uint256 assetsWrittenOff, uint256 reserveUsed);
 
   /// @notice Pulls controller assets into the non-redeemable first-loss reserve.
   /// @param assets Reserve assets transferred in asset native units.

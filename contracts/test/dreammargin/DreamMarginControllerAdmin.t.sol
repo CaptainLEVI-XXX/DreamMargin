@@ -10,6 +10,7 @@ import {DreamMarginController} from "src/dreammargin/DreamMarginController.sol";
 import {PositionClose} from "src/dreammargin/base/PositionClose.sol";
 import {PositionLiquidation} from "src/dreammargin/base/PositionLiquidation.sol";
 import {PositionOpen} from "src/dreammargin/base/PositionOpen.sol";
+import {PositionSettlement} from "src/dreammargin/base/PositionSettlement.sol";
 import {IDreamDexMarkOracle} from "src/interfaces/dreammargin/IDreamDexMarkOracle.sol";
 import {IDreamMarginController} from "src/interfaces/dreammargin/IDreamMarginController.sol";
 import {IDreamDexBinaryPool} from "src/interfaces/integrations/IDreamDexBinaryPool.sol";
@@ -64,6 +65,7 @@ contract DreamMarginControllerAdminTest is Test {
   PositionOpen private _positionOpen;
   PositionClose private _positionClose;
   PositionLiquidation private _positionLiquidation;
+  PositionSettlement private _positionSettlement;
   DreamMarginControllerHarness private _controller;
   MarketKey private _key;
   bytes32 private _generationKey;
@@ -86,6 +88,7 @@ contract DreamMarginControllerAdminTest is Test {
     _positionOpen = new PositionOpen();
     _positionClose = new PositionClose();
     _positionLiquidation = new PositionLiquidation();
+    _positionSettlement = new PositionSettlement();
 
     uint256 nextNonce = vm.getNonce(address(this));
     address predictedController = vm.computeCreateAddress(address(this), nextNonce + 2);
@@ -99,6 +102,7 @@ contract DreamMarginControllerAdminTest is Test {
       address(_positionOpen),
       address(_positionClose),
       address(_positionLiquidation),
+      address(_positionSettlement),
       _initialRoles(),
       _globalRisk()
     );
@@ -114,6 +118,7 @@ contract DreamMarginControllerAdminTest is Test {
     assertEq(_controller.vault(), address(_vault));
     assertEq(_controller.oracle(), address(_oracle));
     assertEq(_controller.feeRecipient(), _FEE_RECIPIENT);
+    assertEq(_controller.positionSettlementFacet(), address(_positionSettlement));
     assertEq(_vault.controller(), address(_controller));
     assertEq(_oracle.configurator(), address(_controller));
     assertEq(_controller.rolesOf(_GOVERNANCE), LibDreamMarginConstants.ROLE_GOVERNANCE);

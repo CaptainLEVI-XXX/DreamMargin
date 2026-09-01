@@ -9,6 +9,7 @@ pragma solidity 0.8.34;
 import {IDreamDexBinaryMarket} from "src/interfaces/integrations/IDreamDexBinaryMarket.sol";
 import {IDreamDexBinaryModule} from "src/interfaces/integrations/IDreamDexBinaryModule.sol";
 import {IDreamDexBinaryPool} from "src/interfaces/integrations/IDreamDexBinaryPool.sol";
+import {IDreamDexBinarySettlement} from "src/interfaces/integrations/IDreamDexBinarySettlement.sol";
 import {IERC20Minimal} from "src/interfaces/integrations/IERC20Minimal.sol";
 import {IERC6909} from "src/interfaces/integrations/IERC6909.sol";
 
@@ -71,6 +72,20 @@ abstract contract DreamDexAdapter {
     uint64 expiry;
     uint64 orderExpiryNs;
     IDreamDexBinaryPool.OrderBookParameters orderBook;
+  }
+
+  /// @notice Fully validated frozen state for one terminal generation outcome.
+  /// @param market Binary market state contract.
+  /// @param settlement Permanent settlement singleton.
+  /// @param marketKey DreamDEX settlement key derived from the outcome ID.
+  /// @param backing Frozen record's currently unredeemed collateral backing.
+  /// @param payoutNumerator Fee-scaled numerator for the recorded outcome.
+  struct ValidatedSettlement {
+    address market;
+    address settlement;
+    uint256 marketKey;
+    uint256 backing;
+    uint256 payoutNumerator;
   }
 
   /// @notice User-bounded immediate binary-order request.
@@ -194,6 +209,96 @@ abstract contract DreamDexAdapter {
       expiry: moduleMarket.expiry,
       orderExpiryNs: pool.marketExpiryNs(),
       orderBook: orderBook
+    });
+  }
+
+  /// @notice Validates a frozen terminal record without consulting a recycled pool's live state.
+  /// @dev DreamDEX encodes `pool`, `nonce`, and outcome index directly in each ERC-6909 ID.
+  /// @param module_ Statically bound DreamDEX binary module.
+  /// @param key Exact position generation tuple.
+  /// @param outcomeIndex Zero for YES or one for NO.
+  /// @return terminal Normalized immutable settlement state and current backing.
+  function _validateSettlement(address module_, MarketKey memory key, uint8 outcomeIndex)
+    internal
+    view
+    returns (ValidatedSettlement memory terminal)
+  {
+    if (outcomeIndex > 1) {
+      revert LibDreamMarginErrors.ValueOutOfBounds("OUTCOME_INDEX", outcomeIndex, 1);
+    }
+
+    uint64 moduleNonce = IDreamDexBinaryModule(module_).marketNonce(key.marketId);
+    if (moduleNonce != key.marketNonce) {
+      revert LibDreamMarginErrors.PoolRecycled(key.pool, key.marketNonce, moduleNonce);
+    }
+    ModuleMarket memory moduleMarket = _readModuleMarket(module_, key.marketId);
+    _equalAddress("MODULE_POOL", key.pool, moduleMarket.pool);
+    _equalAddress("MODULE_COLLATERAL", key.collateral, moduleMarket.collateral);
+    _equalUint("OUTCOME_SLOT_COUNT", 2, moduleMarket.outcomeSlotCount);
+    uint256 expectedOutcomeId = outcomeIndex == 0 ? moduleMarket.yesId : moduleMarket.noId;
+    _equalUint("MODULE_OUTCOME_ID", key.outcomeId, expectedOutcomeId);
+
+    uint256 encodedOutcomeId =
+      (uint256(uint160(key.pool)) << 72) | (uint256(key.marketNonce) << 8) | uint256(outcomeIndex);
+    _equalUint("ENCODED_OUTCOME_ID", key.outcomeId, encodedOutcomeId);
+
+    IDreamDexBinaryMarket market = IDreamDexBinaryMarket(moduleMarket.market);
+    _equalAddress("MARKET_POOL", key.pool, market.pool());
+    _equalAddress("MARKET_COLLATERAL", key.collateral, market.collateral());
+    _equalAddress("MARKET_OUTCOME_TOKEN", key.outcomeToken, market.outcomeToken());
+    _equalUint("MARKET_YES_ID", moduleMarket.yesId, market.yesId());
+    _equalUint("MARKET_NO_ID", moduleMarket.noId, market.noId());
+    _equalUint("MARKET_EXPIRY", moduleMarket.expiry, market.expiry());
+
+    address settlementAddress = IDreamDexBinaryModule(module_).settlement();
+    IDreamDexBinarySettlement settlement = IDreamDexBinarySettlement(settlementAddress);
+    _equalAddress("SETTLEMENT_OUTCOME_TOKEN", key.outcomeToken, settlement.outcomeToken());
+    if (!settlement.isFinalized(key.outcomeId)) {
+      revert LibDreamMarginErrors.SettlementNotFinal(key.outcomeId);
+    }
+
+    uint256 marketKey = key.outcomeId >> 8;
+    IDreamDexBinarySettlement.SettlementRecord memory record = settlement.getSettlement(marketKey);
+    if (!record.finalized) revert LibDreamMarginErrors.SettlementNotFinal(key.outcomeId);
+    _equalAddress("SETTLEMENT_COLLATERAL", key.collateral, record.collateralToken);
+    _equalAddress("SETTLEMENT_POOL", key.pool, record.pool);
+    _equalUint("SETTLEMENT_NONCE", key.marketNonce, record.nonce);
+    _equalUint(
+      "PAYOUT_VECTOR_LENGTH", moduleMarket.outcomeSlotCount, record.payoutNumerators.length
+    );
+    if (record.settlementFeeBpsTimes1k > LibDreamMarginConstants.BPS_TIMES_1K) {
+      revert LibDreamMarginErrors.ValueOutOfBounds(
+        "SETTLEMENT_FEE", record.settlementFeeBpsTimes1k, LibDreamMarginConstants.BPS_TIMES_1K
+      );
+    }
+    if (record.voided && record.settlementFeeBpsTimes1k != 0) {
+      _mismatch("VOID_SETTLEMENT_FEE", bytes32(0), bytes32(record.settlementFeeBpsTimes1k));
+    }
+    uint256 payoutNumerator = record.payoutNumerators[outcomeIndex];
+    if (payoutNumerator > LibDreamMarginConstants.SETTLEMENT_PAYOUT_DENOMINATOR) {
+      revert LibDreamMarginErrors.ValueOutOfBounds(
+        "PAYOUT_NUMERATOR", payoutNumerator, LibDreamMarginConstants.SETTLEMENT_PAYOUT_DENOMINATOR
+      );
+    }
+
+    uint8 expectedStatus = record.voided
+      ? LibDreamMarginConstants.MARKET_STATUS_VOIDED
+      : LibDreamMarginConstants.MARKET_STATUS_RESOLVED;
+    uint8 actualStatus = market.status();
+    if (actualStatus != expectedStatus) {
+      revert LibDreamMarginErrors.InvalidMarketStatus(
+        moduleMarket.market, actualStatus, expectedStatus
+      );
+    }
+    _equalUint("MARKET_RESOLVED", record.voided ? 0 : 1, market.isResolved() ? 1 : 0);
+    _equalUint("MARKET_VOIDED", record.voided ? 1 : 0, market.isVoided() ? 1 : 0);
+
+    terminal = ValidatedSettlement({
+      market: moduleMarket.market,
+      settlement: settlementAddress,
+      marketKey: marketKey,
+      backing: record.backing,
+      payoutNumerator: payoutNumerator
     });
   }
 

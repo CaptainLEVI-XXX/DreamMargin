@@ -19,6 +19,9 @@ library LibDreamMarginConstants {
   /// @notice One hundred percent in DreamDEX's basis-points-times-one-thousand unit.
   uint256 internal constant BPS_TIMES_1K = 10_000_000;
 
+  /// @notice Denominator of DreamDEX's frozen fee-scaled settlement payout vector.
+  uint256 internal constant SETTLEMENT_PAYOUT_DENOMINATOR = 10_000_000;
+
   /// @notice Number of nanoseconds in one second.
   uint256 internal constant NS_PER_SECOND = 1e9;
 

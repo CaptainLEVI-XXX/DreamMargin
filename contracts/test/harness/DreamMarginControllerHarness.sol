@@ -7,8 +7,6 @@ pragma solidity 0.8.34;
 /// @dev Lifecycle selectors deliberately revert and are replaced by production modules later.
 
 import {DreamMarginController} from "src/dreammargin/DreamMarginController.sol";
-import {IDreamMarginController} from "src/interfaces/dreammargin/IDreamMarginController.sol";
-import {LibDreamMarginErrors} from "src/libs/dreammargin/LibDreamMarginErrors.sol";
 import {
   GlobalRiskConfig,
   LibDreamMarginStorage
@@ -25,6 +23,7 @@ contract DreamMarginControllerHarness is DreamMarginController {
     address positionOpenFacet_,
     address positionCloseFacet_,
     address positionLiquidationFacet_,
+    address positionSettlementFacet_,
     InitialRoles memory initialRoles,
     GlobalRiskConfig memory globalRisk
   )
@@ -36,6 +35,7 @@ contract DreamMarginControllerHarness is DreamMarginController {
       positionOpenFacet_,
       positionCloseFacet_,
       positionLiquidationFacet_,
+      positionSettlementFacet_,
       initialRoles,
       globalRisk
     )
@@ -70,10 +70,5 @@ contract DreamMarginControllerHarness is DreamMarginController {
     outcomeDebtShares = self.outcomeDebtShares[generationKey];
     marketDebtShares = self.marketDebtShares[marketGroup];
     totalDebtShares = self.totalDebtShares;
-  }
-
-  /// @inheritdoc IDreamMarginController
-  function settle(uint256) external pure override returns (uint256, uint256, uint256) {
-    revert LibDreamMarginErrors.ActionBlocked(0, this.settle.selector);
   }
 }

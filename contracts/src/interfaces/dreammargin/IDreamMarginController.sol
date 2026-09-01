@@ -85,6 +85,10 @@ interface IDreamMarginController {
   /// @return facet Predeployed facet reached only by the liquidation selector.
   function positionLiquidationFacet() external view returns (address facet);
 
+  /// @notice Returns the immutable terminal-settlement facet.
+  /// @return facet Settlement facet address.
+  function positionSettlementFacet() external view returns (address facet);
+
   /// @notice Returns an account's complete role bitmap.
   /// @param account Account queried.
   /// @return roles Assigned role bits.
@@ -312,6 +316,17 @@ interface IDreamMarginController {
     uint256 indexed positionId, uint256 repaid, uint256 ownerAssets, uint256 badDebt
   );
 
+  /// @notice Emitted when actual collateral is added to the first-loss reserve.
+  /// @param payer Account supplying reserve collateral.
+  /// @param assets Exact collateral received by the vault.
+  /// @param reserveShares Non-redeemable reserve shares minted.
+  event ReserveFunded(address indexed payer, uint256 assets, uint256 reserveShares);
+
+  /// @notice Emitted when actual post-write-off collateral reaches the vault.
+  /// @param payer Account supplying recovered collateral.
+  /// @param assets Exact collateral recorded as recovery.
+  event BadDebtRecovered(address indexed payer, uint256 assets);
+
   /// @notice Opens one isolated leveraged position atomically.
   /// @param params Exact generation, collateral, leverage, price, fill, and deadline bounds.
   /// @return positionId Newly allocated position identifier.
@@ -371,6 +386,15 @@ interface IDreamMarginController {
     external
     returns (uint256 repaid, uint256 ownerAssets, uint256 badDebt);
 
+  /// @notice Supplies actual collateral to the non-redeemable first-loss reserve.
+  /// @param assets Exact collateral pulled from the caller.
+  /// @return reserveShares Non-redeemable reserve shares minted by the vault.
+  function fundReserve(uint256 assets) external returns (uint256 reserveShares);
+
+  /// @notice Supplies actual collateral against previously realized bad debt.
+  /// @param assets Exact collateral pulled from the caller.
+  function recordRecovery(uint256 assets) external;
+
   /// @notice Returns one stored position.
   /// @param positionId Position identifier.
   /// @return position Stored position state.
@@ -387,4 +411,13 @@ interface IDreamMarginController {
   /// @notice Returns the current protocol-wide operating mode.
   /// @return mode Current active, reduce-only, or paused mode.
   function protocolMode() external view returns (ProtocolMode mode);
+
+  /// @notice Returns the current realized-loss window and restoration cooldown anchor.
+  /// @return dailyLoss Loss accumulated in the active fixed window.
+  /// @return windowStartedAt Start timestamp of the active loss window.
+  /// @return reduceOnlyTriggeredAt Latest threshold-breaching loss timestamp.
+  function lossState()
+    external
+    view
+    returns (uint256 dailyLoss, uint40 windowStartedAt, uint40 reduceOnlyTriggeredAt);
 }

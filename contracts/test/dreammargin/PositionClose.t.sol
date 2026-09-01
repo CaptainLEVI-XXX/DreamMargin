@@ -10,6 +10,7 @@ import {DreamMarginController} from "src/dreammargin/DreamMarginController.sol";
 import {PositionClose} from "src/dreammargin/base/PositionClose.sol";
 import {PositionLiquidation} from "src/dreammargin/base/PositionLiquidation.sol";
 import {PositionOpen} from "src/dreammargin/base/PositionOpen.sol";
+import {PositionSettlement} from "src/dreammargin/base/PositionSettlement.sol";
 import {IDreamMarginController} from "src/interfaces/dreammargin/IDreamMarginController.sol";
 import {IDreamDexBinaryPool} from "src/interfaces/integrations/IDreamDexBinaryPool.sol";
 
@@ -74,6 +75,7 @@ contract PositionCloseTest is Test {
   PositionOpen private _positionOpen;
   PositionClose private _positionClose;
   PositionLiquidation private _positionLiquidation;
+  PositionSettlement private _positionSettlement;
   DreamMarginControllerHarness private _controller;
   MarketKey private _key;
   bytes32 private _generationKey;
@@ -96,6 +98,7 @@ contract PositionCloseTest is Test {
     _positionOpen = new PositionOpen();
     _positionClose = new PositionClose();
     _positionLiquidation = new PositionLiquidation();
+    _positionSettlement = new PositionSettlement();
 
     uint256 nextNonce = vm.getNonce(address(this));
     address predictedController = vm.computeCreateAddress(address(this), nextNonce + 2);
@@ -109,6 +112,7 @@ contract PositionCloseTest is Test {
       address(_positionOpen),
       address(_positionClose),
       address(_positionLiquidation),
+      address(_positionSettlement),
       _initialRoles(),
       _globalRisk()
     );

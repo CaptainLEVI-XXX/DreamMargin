@@ -102,7 +102,7 @@ contract MockDreamDexBinaryMarket is IDreamDexBinaryMarket {
   /// @param voided_ Whether the market is voided.
   function resolve(uint256[] calldata numerators, bool voided_) external {
     _payoutNumerators = numerators;
-    _resolved = true;
+    _resolved = !voided_;
     _voided = voided_;
     status = voided_ ? 5 : 4;
   }
