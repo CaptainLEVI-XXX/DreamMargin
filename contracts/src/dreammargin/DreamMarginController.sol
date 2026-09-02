@@ -27,7 +27,7 @@ import {
 } from "src/libs/dreammargin/LibDreamMarginStorage.sol";
 
 /// @notice Administrative controller shell statically composed with the DreamDEX adapter.
-abstract contract DreamMarginController is IDreamMarginController, DreamDexAdapter {
+contract DreamMarginController is IDreamMarginController, DreamDexAdapter {
   /// @notice Mask containing every role bit recognized by this deployment.
   uint256 private constant _ALL_ROLES = LibDreamMarginConstants.ROLE_GOVERNANCE
     | LibDreamMarginConstants.ROLE_RISK_STEWARD | LibDreamMarginConstants.ROLE_GUARDIAN

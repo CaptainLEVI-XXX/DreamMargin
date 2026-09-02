@@ -25,6 +25,7 @@ chain_id = 50312
 extra_output = ["storageLayout"]
 fs_permissions = [
   { access = "read", path = "./test/reference" },
+  { access = "write", path = "./deployments" },
 ]
 
 [profile.default.fuzz]
