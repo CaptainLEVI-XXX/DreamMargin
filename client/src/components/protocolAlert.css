@@ -1,0 +1,11 @@
+.dm-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--dm-space) * 2);
+  border: 1px solid var(--dm-line);
+  border-radius: var(--dm-radius);
+  padding: calc(var(--dm-space) * 1.5) calc(var(--dm-space) * 2);
+  margin-bottom: calc(var(--dm-space) * 3);
+  font-size: var(--dm-size-13);
+}
