@@ -1,0 +1,82 @@
+.dm-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dm-header {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--dm-space) * 4);
+  border-bottom: 1px solid var(--dm-divider);
+  padding: calc(var(--dm-space) * 2) var(--dm-mobile-pad);
+}
+
+.dm-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dm-space);
+}
+
+/* The mark is white on the dark ground — never violet. §18.4 */
+.dm-mark {
+  font-family: var(--dm-font-brand);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--dm-ink);
+  border: 1px solid var(--dm-line);
+  padding: 2px 6px;
+}
+
+.dm-wordmark {
+  font-family: var(--dm-font-brand);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--dm-ink);
+}
+
+.dm-nav-desktop {
+  display: none;
+  gap: calc(var(--dm-space) * 3);
+}
+
+.dm-nav-desktop a,
+.dm-nav-mobile a {
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-13);
+  color: var(--dm-text);
+  text-decoration: none;
+}
+
+.dm-nav-desktop a[aria-current="page"],
+.dm-nav-mobile a[aria-current="page"] {
+  color: var(--dm-ink);
+}
+
+.dm-main {
+  flex: 1;
+  width: 100%;
+  max-width: var(--dm-max-width);
+  margin: 0 auto;
+  padding: var(--dm-page-space) var(--dm-mobile-pad);
+}
+
+.dm-nav-mobile {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: space-around;
+  border-top: 1px solid var(--dm-divider);
+  background: var(--dm-ground);
+  padding: calc(var(--dm-space) * 2) var(--dm-mobile-pad);
+}
+
+@media (min-width: 1024px) {
+  .dm-nav-desktop {
+    display: flex;
+  }
+
+  .dm-nav-mobile {
+    display: none;
+  }
+}
