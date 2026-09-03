@@ -1,0 +1,40 @@
+{
+  "schema": "dreammargin.shannon-selection.v1",
+  "discoveredAt": 1788394909,
+  "venueId": "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c",
+  "requiredHeadroomSeconds": 21600,
+  "btc": {
+    "marketId": "0x0000000000000000000000000000000000000000000000000000000000011ad5",
+    "marketAddress": "0x36fa3ea8bedecab4aa25673f571565e5737234cc",
+    "poolAddress": "0x8eb893db72752b1d2b3ac11f625af90db1beb404",
+    "nonce": "68",
+    "yesTokenId": "3847750713332781179217769380546506427338652337229629986951389423617024",
+    "noTokenId": "3847750713332781179217769380546506427338652337229629986951389423617025",
+    "collateral": "0x70a86d8842fb63c4ad2b7cdddf530ebf1bb25d8e",
+    "asset": "BTC",
+    "tradingStart": "1788393600",
+    "expiry": "1788480000",
+    "clobStatus": "Trading",
+    "venueId": "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c",
+    "operatorId": 2,
+    "intervalSec": "86400",
+    "question": "BTC closes at or above its opening price"
+  },
+  "eth": {
+    "marketId": "0x0000000000000000000000000000000000000000000000000000000000011ad6",
+    "marketAddress": "0xda7e028c9973b3c429b4c093cb984860fc1215f8",
+    "poolAddress": "0x246a65643ad8b6c6dbd0b017a259da07681242fd",
+    "nonce": "106",
+    "yesTokenId": "981762892987552592529876415592559547602498254264742346774773393025536",
+    "noTokenId": "981762892987552592529876415592559547602498254264742346774773393025537",
+    "collateral": "0x70a86d8842fb63c4ad2b7cdddf530ebf1bb25d8e",
+    "asset": "ETH",
+    "tradingStart": "1788393600",
+    "expiry": "1788480000",
+    "clobStatus": "Trading",
+    "venueId": "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c",
+    "operatorId": 2,
+    "intervalSec": "86400",
+    "question": "ETH closes at or above its opening price"
+  }
+}

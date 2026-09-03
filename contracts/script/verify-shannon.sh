@@ -1,20 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# This is a future live-deployment verification template. The fork rehearsal never
-# invokes it because local mirror addresses do not exist on the Shannon explorer.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONTRACTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE="${ENV_FILE:-$CONTRACTS_DIR/.env}"
+MANIFEST="$CONTRACTS_DIR/deployments/shannon-deployment.json"
+
+if [[ ! -f "$ENV_FILE" || ! -f "$MANIFEST" ]]; then
+  echo "Missing .env or deployments/shannon-deployment.json." >&2
+  exit 1
+fi
+
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
+
 : "${SOMNIA_RPC_URL:?set SOMNIA_RPC_URL}"
-: "${SOMNIA_VERIFIER_URL:?set SOMNIA_VERIFIER_URL}"
-: "${VAULT_ADDRESS:?set VAULT_ADDRESS}"
-: "${ORACLE_ADDRESS:?set ORACLE_ADDRESS}"
-: "${CONTROLLER_ADDRESS:?set CONTROLLER_ADDRESS}"
-: "${POSITION_OPEN_FACET:?set POSITION_OPEN_FACET}"
-: "${POSITION_CLOSE_FACET:?set POSITION_CLOSE_FACET}"
-: "${POSITION_LIQUIDATION_FACET:?set POSITION_LIQUIDATION_FACET}"
-: "${POSITION_SETTLEMENT_FACET:?set POSITION_SETTLEMENT_FACET}"
-: "${VAULT_CONSTRUCTOR_ARGS:?set ABI-encoded VAULT_CONSTRUCTOR_ARGS}"
-: "${ORACLE_CONSTRUCTOR_ARGS:?set ABI-encoded ORACLE_CONSTRUCTOR_ARGS}"
-: "${CONTROLLER_CONSTRUCTOR_ARGS:?set ABI-encoded CONTROLLER_CONSTRUCTOR_ARGS}"
+SOMNIA_VERIFIER_URL="${SOMNIA_VERIFIER_URL:-${SHANNON_EXPLORER_URL%/}/api}"
+
+address() { jq -r ".$1" "$MANIFEST"; }
+argument() { jq -r ".$1" "$MANIFEST"; }
 
 verify() {
   forge verify-contract \
@@ -30,15 +36,17 @@ verify() {
     "$@"
 }
 
-verify "$POSITION_OPEN_FACET" src/dreammargin/base/PositionOpen.sol:PositionOpen
-verify "$POSITION_CLOSE_FACET" src/dreammargin/base/PositionClose.sol:PositionClose
-verify "$POSITION_LIQUIDATION_FACET" \
+cd "$CONTRACTS_DIR"
+verify "$(address transientProbe)" script/DeployShannon.s.sol:ShannonTransientProbe
+verify "$(address positionOpenFacet)" src/dreammargin/base/PositionOpen.sol:PositionOpen
+verify "$(address positionCloseFacet)" src/dreammargin/base/PositionClose.sol:PositionClose
+verify "$(address positionLiquidationFacet)" \
   src/dreammargin/base/PositionLiquidation.sol:PositionLiquidation
-verify "$POSITION_SETTLEMENT_FACET" \
+verify "$(address positionSettlementFacet)" \
   src/dreammargin/base/PositionSettlement.sol:PositionSettlement
-verify --constructor-args "$VAULT_CONSTRUCTOR_ARGS" \
-  "$VAULT_ADDRESS" src/vault/DreamMarginVault.sol:DreamMarginVault
-verify --constructor-args "$ORACLE_CONSTRUCTOR_ARGS" \
-  "$ORACLE_ADDRESS" src/oracle/DreamDexMarkOracle.sol:DreamDexMarkOracle
-verify --constructor-args "$CONTROLLER_CONSTRUCTOR_ARGS" \
-  "$CONTROLLER_ADDRESS" src/dreammargin/DreamMarginController.sol:DreamMarginController
+verify --constructor-args "$(argument vaultConstructorArgs)" \
+  "$(address vault)" src/vault/DreamMarginVault.sol:DreamMarginVault
+verify --constructor-args "$(argument oracleConstructorArgs)" \
+  "$(address oracle)" src/oracle/DreamDexMarkOracle.sol:DreamDexMarkOracle
+verify --constructor-args "$(argument controllerConstructorArgs)" \
+  "$(address controller)" src/dreammargin/DreamMarginController.sol:DreamMarginController
