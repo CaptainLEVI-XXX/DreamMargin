@@ -9,6 +9,8 @@ import { EarnView } from "./views/EarnView";
 import { MarketsView } from "./views/MarketsView";
 import { PositionsView } from "./views/PositionsView";
 import { useChain, useWallet } from "./web3/useChain";
+import { useBalances } from "./web3/useBalances";
+import { GetStartedView } from "./views/GetStartedView";
 
 const NAMES: ScenarioName[] = [
   "healthy",
@@ -28,6 +30,12 @@ export default function App() {
   const chain = useChain(account);
 
   const fixture = SCENARIOS[scenario];
+  const primaryMarket = fixture.markets[0];
+  const { balances, refresh } = useBalances(
+    account,
+    primaryMarket.key.outcomeId,
+    primaryMarket.key.outcomeId + 1n,
+  );
 
   // Market discovery and positions still come from fixtures: those need the
   // indexer client and the position log scan, which land in the next plan. The
@@ -73,15 +81,39 @@ export default function App() {
         <ProtocolAlert protocol={snapshot.protocol} positions={snapshot.positions} />
       )}
 
+      {route === "start" && (
+        <GetStartedView
+          account={account}
+          balances={balances}
+          market={{ ...primaryMarket, ownedYes: balances.yes, ownedNo: balances.no }}
+          vault={snapshot.vault}
+          onSettled={refresh}
+        />
+      )}
+
       {route === "markets" &&
         (builder === null ? (
-          <MarketsView snapshot={snapshot} onOpenBuilder={setBuilder} />
+          <MarketsView
+            snapshot={
+              account === null
+                ? snapshot
+                : {
+                    ...snapshot,
+                    markets: snapshot.markets.map((m, i) =>
+                      i === 0 ? { ...m, ownedYes: balances.yes, ownedNo: balances.no } : m,
+                    ),
+                  }
+            }
+            onOpenBuilder={setBuilder}
+          />
         ) : (
           <BuilderView
             market={builder}
             protocol={snapshot.protocol}
             onBack={() => setBuilder(null)}
             account={account}
+            outcomeAllowance={balances.yesAllowance}
+            onSettled={refresh}
           />
         ))}
       {route === "positions" && <PositionsView snapshot={snapshot} />}

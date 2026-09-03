@@ -55,7 +55,7 @@ describe("safe actions survive degraded protocol modes", () => {
     "keeps repay enabled under %s",
     (name) => {
       const { getByRole } = render(<PositionsView snapshot={SCENARIOS[name]} />);
-      expect(getByRole("button", { name: /repay/i })).toBeEnabled();
+      expect(getByRole("button", { name: "Repay" })).toBeEnabled();
     },
   );
 

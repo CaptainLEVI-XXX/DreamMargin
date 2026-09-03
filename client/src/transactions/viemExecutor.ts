@@ -13,6 +13,7 @@ import { DEPLOYMENT } from "../config/deployment";
 import { describeContractError } from "../domain/errors";
 import { controllerAbi } from "../web3/abis/controllerAbi";
 import { errorsAbi } from "../web3/abis/errorsAbi";
+import { vaultAbi } from "../web3/abis/vaultAbi";
 import type { Eip1193 } from "../web3/wallet";
 import type { CallPlan } from "./callPlan";
 import type { ExecutorDeps, SimulatedRequest } from "./executor";
@@ -92,10 +93,18 @@ export type ViemDepsInput = {
     functionName: string;
     args: readonly unknown[];
   };
-  /** The controller action, rebuilt fresh at simulation time. */
+  /** The action, rebuilt fresh at simulation time. */
   buildAction: () => Promise<ActionRequest & { fresh: import("./bounds").Bounds }>;
-  /** Protocol event that must appear in the receipt for this to count. */
-  expectedEvent: string;
+  /** Contract the action targets. Defaults to the controller. */
+  actionAddress?: Address;
+  /** ABI for the action. Defaults to the controller ABI. */
+  actionAbi?: readonly unknown[];
+  /**
+   * Protocol event that must appear in the receipt. When absent — as for the
+   * testnet faucet, which emits only a transfer — a successful receipt is
+   * accepted on its own.
+   */
+  expectedEvent?: string;
   /** Re-read authoritative state after the receipt. */
   reconcile: () => Promise<void>;
 };
@@ -122,8 +131,8 @@ export function viemDeps(input: ViemDepsInput): ExecutorDeps {
       // §17: simulate against the current block immediately before signing.
       const { request } = await publicClient.simulateContract({
         account,
-        address: DEPLOYMENT.controller as Address,
-        abi: controllerAbi,
+        address: input.actionAddress ?? (DEPLOYMENT.controller as Address),
+        abi: (input.actionAbi ?? controllerAbi) as never,
         functionName: action.functionName as never,
         args: action.args as never,
       });
@@ -157,9 +166,11 @@ export function viemDeps(input: ViemDepsInput): ExecutorDeps {
     },
 
     async verifyEvent(hash: string) {
+      // No named event means the receipt itself is the whole result.
+      if (input.expectedEvent === undefined) return true;
       const receipt = await publicClient.getTransactionReceipt({ hash: hash as Hash });
       const events = parseEventLogs({
-        abi: controllerAbi,
+        abi: [...controllerAbi, ...vaultAbi] as never,
         logs: receipt.logs,
         eventName: input.expectedEvent as never,
       });

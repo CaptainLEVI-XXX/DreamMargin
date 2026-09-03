@@ -29,18 +29,18 @@ describe("PositionsView", () => {
 
   it("keeps repay available when paused", () => {
     render(<PositionsView snapshot={SCENARIOS.paused} />);
-    expect(screen.getByRole("button", { name: /repay/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Repay" })).toBeEnabled();
   });
 
   it("keeps repay and add collateral available on a stale oracle", () => {
     render(<PositionsView snapshot={SCENARIOS.staleOracle} />);
-    expect(screen.getByRole("button", { name: /repay/i })).toBeEnabled();
-    expect(screen.getByRole("button", { name: /add collateral/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Repay" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Add collateral" })).toBeEnabled();
   });
 
   it("offers settlement on a resolved position", () => {
     render(<PositionsView snapshot={SCENARIOS.resolved} />);
-    expect(screen.getByRole("button", { name: /settle/i })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Settle position" })).toBeVisible();
   });
 
   it("distinguishes market value from conservative risk value per §4.5", () => {
