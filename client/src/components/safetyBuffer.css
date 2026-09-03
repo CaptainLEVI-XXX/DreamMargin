@@ -1,0 +1,40 @@
+.dm-buffer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dm-space);
+}
+
+.dm-buffer-head,
+.dm-buffer-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--dm-space) * 2);
+  font-size: var(--dm-size-13);
+}
+
+.dm-buffer-track {
+  height: 4px;
+  background: var(--dm-divider);
+  border-radius: var(--dm-radius);
+  overflow: hidden;
+}
+
+.dm-buffer-fill {
+  height: 100%;
+  transition: width var(--dm-transition);
+  background: var(--dm-up);
+}
+
+/* Risk escalation changes colour and label; geometry never moves. §18.1 */
+.dm-buffer[data-level="watch"] .dm-buffer-fill,
+.dm-buffer[data-level="at-risk"] .dm-buffer-fill {
+  background: var(--dm-warn);
+}
+
+.dm-buffer[data-level="liquidatable"] .dm-buffer-fill {
+  background: var(--dm-down);
+}
+
+.dm-buffer-state {
+  color: var(--dm-ink);
+}
