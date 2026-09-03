@@ -1,3 +1,4 @@
+import { ageLabel, freshnessOf, type Freshness } from "../domain/freshness";
 import type { OracleSnapshot } from "../web3/reads";
 import { Value } from "./Value";
 
@@ -12,20 +13,6 @@ import { Value } from "./Value";
  * frontend-spec §16.2: show observation age and whether data is live, delayed,
  * or stale — never a generic animated dot with no timestamp.
  */
-
-export type Freshness = "live" | "delayed" | "stale" | "building";
-
-export function freshnessOf(snapshot: OracleSnapshot): Freshness {
-  if (snapshot.stale) return "stale";
-  if (snapshot.mark === null) return "building";
-  return snapshot.updatedSecondsAgo > 60 ? "delayed" : "live";
-}
-
-function ageLabel(seconds: number): string {
-  if (seconds < 60) return `${seconds}s ago`;
-  if (seconds < 3_600) return `${Math.floor(seconds / 60)}m ago`;
-  return `${Math.floor(seconds / 3_600)}h ago`;
-}
 
 const WORDING: Record<Freshness, string> = {
   live: "Live",

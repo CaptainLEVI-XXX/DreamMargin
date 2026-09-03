@@ -81,6 +81,7 @@ export default function App() {
             market={builder}
             protocol={snapshot.protocol}
             onBack={() => setBuilder(null)}
+            account={account}
           />
         ))}
       {route === "positions" && <PositionsView snapshot={snapshot} />}

@@ -105,28 +105,17 @@ describe("BuilderView transaction intent", () => {
     // Progress replaces the button in the same surface: no second app
     // confirmation, and no modal.
     expect(screen.queryByRole("button", { name: /add .* leverage/i })).toBeNull();
-    expect(screen.getByText("Open 1.25x position")).toBeVisible();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("shows the approval step only when one is required", async () => {
-    const { unmount } = render(
-      <BuilderView market={market} protocol={SCENARIOS.healthy.protocol} onBack={() => {}} />,
-    );
+  it("explains itself instead of prompting when no wallet is connected", async () => {
+    // There is no injected provider under test, which is the same position a
+    // visitor without a wallet is in. §17.1 forbids opening anything on click
+    // in that case, so the reason appears in place.
+    render(<BuilderView market={market} protocol={SCENARIOS.healthy.protocol} onBack={() => {}} />);
     await userEvent.click(screen.getByRole("button", { name: /add .* leverage/i }));
-    expect(screen.getByText(/approve .* YES only/i)).toBeVisible();
-    unmount();
-
-    render(
-      <BuilderView
-        market={market}
-        protocol={SCENARIOS.healthy.protocol}
-        onBack={() => {}}
-        outcomeAllowance={market.ownedYes}
-      />,
-    );
-    await userEvent.click(screen.getByRole("button", { name: /add .* leverage/i }));
-    expect(screen.queryByText(/approve .* YES only/i)).toBeNull();
+    expect(screen.getByText(/connect a wallet to open a position/i)).toBeVisible();
+    expect(screen.getByRole("button", { name: /try again/i })).toBeVisible();
   });
 
   it("keeps one solid violet object once progress replaces the button", async () => {

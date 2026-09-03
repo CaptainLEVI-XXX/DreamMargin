@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Button } from "../components/Button";
+import { MarketChart } from "../components/MarketChart";
 import { TransactionProgress } from "../components/TransactionProgress";
 import { Card } from "../components/Card";
 import { LeverageTiers } from "../components/LeverageTiers";
@@ -18,6 +19,12 @@ import {
   type WalletCapabilities,
 } from "../transactions/callPlan";
 import { createIntent, transition, type Intent } from "../transactions/machine";
+import { useIndexSeries } from "../data/useIndexSeries";
+import { runIntent } from "../transactions/executor";
+import { createWallet, explainRevert, viemDeps } from "../transactions/viemExecutor";
+import { createReadClient } from "../web3/client";
+import { getInjected } from "../web3/wallet";
+import { erc6909Abi } from "@somnia-chain/markets-sdk";
 
 const BPS = 10_000n;
 
@@ -29,6 +36,10 @@ type Props = {
   capabilities?: WalletCapabilities;
   /** Current outcome allowance to the controller, in shares. */
   outcomeAllowance?: bigint;
+  /** Connected account. Without one the action cannot be signed. */
+  account?: `0x${string}` | null;
+  /** Called after a successful open so callers can refetch. */
+  onSettled?: () => void;
 };
 
 /**
@@ -45,11 +56,14 @@ export function BuilderView({
   onBack,
   capabilities = { atomicBatch: false },
   outcomeAllowance = 0n,
+  account = null,
+  onSettled,
 }: Props) {
   const tiers = tiersFor(market.maxLeverageBps);
   const [leverageBps, setLeverageBps] = useState<bigint>(defaultTier(tiers));
   const [intent, setIntent] = useState<Intent | null>(null);
   const decimals = market.collateralDecimals;
+  const index = useIndexSeries(market.asset, market.tradingStart);
 
   const commit = market.ownedYes;
   const equity = mulDivDown(commit, market.riskMark, market.oneCollateral);
@@ -110,6 +124,10 @@ export function BuilderView({
           <Value>{formatCents(market.yesPrice, market.oneCollateral)}</Value>
           <span>Market price</span>
         </div>
+
+        {index.kind === "ready" ? (
+          <MarketChart series={index.series} strike={index.strike} asset={market.asset} />
+        ) : null}
 
         <dl className="dm-market-facts">
           <dt>Risk mark</dt>
@@ -194,15 +212,73 @@ export function BuilderView({
             variant="primary"
             disabled={!availability.canOpen}
             disabledReason={availability.openBlockedReason}
-            onClick={() =>
-              setIntent(
-                transition(transition(createIntent(reviewed), { type: "start" }), {
-                  type: "plan-ready",
-                  plan,
-                  capabilities,
+            onClick={() => {
+              const provider = getInjected();
+              if (provider === null || account === null) {
+                // Without a wallet the intent cannot proceed. Show the reason
+                // in place rather than opening anything.
+                setIntent(
+                  transition(
+                    transition(transition(createIntent(reviewed), { type: "start" }), {
+                      type: "plan-ready",
+                      plan,
+                      capabilities,
+                    }),
+                    { type: "failed", message: "Connect a wallet to open a position" },
+                  ),
+                );
+                return;
+              }
+
+              const publicClient = createReadClient();
+              const deps = viemDeps({
+                publicClient,
+                walletClient: createWallet(provider, account),
+                account,
+                provider,
+                approval:
+                  outcomeAllowance >= commit
+                    ? undefined
+                    : {
+                        address: DEPLOYMENT.outcomeToken as `0x${string}`,
+                        abi: erc6909Abi as readonly unknown[],
+                        functionName: "approve",
+                        // Exact id, exact amount. Never a global operator grant.
+                        args: [DEPLOYMENT.controller, market.key.outcomeId, commit],
+                      },
+                buildAction: async () => ({
+                  functionName: "openPosition",
+                  args: [
+                    {
+                      key: market.key,
+                      outcomeIndex: 0,
+                      initialShares: commit,
+                      leverageBps,
+                      maxCollateralIn: borrowed,
+                      minSharesOut,
+                      limitPrice: market.yesPrice,
+                      orderType: 2,
+                      deadline: BigInt(Math.floor(Date.now() / 1000) + 60),
+                    },
+                  ],
+                  fresh: reviewed,
                 }),
-              )
-            }
+                expectedEvent: "PositionOpened",
+                reconcile: async () => {
+                  onSettled?.();
+                },
+              });
+
+              void runIntent(createIntent(reviewed), plan, capabilities, deps, setIntent).catch(
+                (error: unknown) => {
+                  setIntent((current) =>
+                    current === null
+                      ? current
+                      : transition(current, { type: "failed", message: explainRevert(error) }),
+                  );
+                },
+              );
+            }}
           >
             Add {formatMultiple(leverageBps)} leverage
           </Button>

@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { FreshnessBadge, freshnessOf } from "./FreshnessBadge";
+import { FreshnessBadge } from "./FreshnessBadge";
+import { freshnessOf } from "../domain/freshness";
 import type { OracleSnapshot } from "../web3/reads";
 
 const fresh: OracleSnapshot = {

@@ -1,0 +1,60 @@
+.dm-chart {
+  margin: 0 0 calc(var(--dm-space) * 2);
+  border: 1px solid var(--dm-line);
+  border-radius: var(--dm-radius);
+  padding: calc(var(--dm-space) * 1.5);
+}
+
+.dm-chart svg {
+  width: 100%;
+  height: 160px;
+  display: block;
+}
+
+.dm-chart-head,
+.dm-chart-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--dm-space) * 2);
+  font-size: var(--dm-size-11);
+  font-family: var(--dm-font-mono);
+  color: var(--dm-text);
+}
+
+.dm-chart-head {
+  margin-bottom: var(--dm-space);
+}
+
+.dm-chart-foot {
+  margin-top: var(--dm-space);
+}
+
+/* Green and red mean value movement here, which §18.3 permits. */
+.dm-chart-line {
+  stroke: var(--dm-down);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.dm-chart-line[data-up="true"] {
+  stroke: var(--dm-up);
+}
+
+.dm-chart-strike {
+  stroke: var(--dm-text);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.dm-chart-verdict {
+  color: var(--dm-down);
+}
+
+.dm-chart-verdict[data-above="true"] {
+  color: var(--dm-up);
+}
+
+.dm-chart-empty {
+  color: var(--dm-text);
+  font-size: var(--dm-size-13);
+}
