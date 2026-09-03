@@ -151,7 +151,7 @@ contract DreamDexAdapterTest is Test {
 
   /// @notice Reconciles a partial YES IOC buy from actual token balances and clears approval.
   function test_iocBuyUsesActualDeltasAndClearsApproval() external {
-    _pool.setExecution(_HALF_FILL, 0);
+    _pool.setExecution(_HALF_FILL, 77);
     DreamDexAdapter.ExecutionResult memory result = _adapter.buyOutcome(_buyOrder(0));
 
     assertEq(result.outcomeAmount, 2 * _ONE);
@@ -201,6 +201,7 @@ contract DreamDexAdapterTest is Test {
   /// @notice Rejects a nonzero immediate-order ID and rolls the venue transfer back.
   function test_rejectsRestingOrderIdAtomically() external {
     _pool.setExecution(10_000, 77);
+    _pool.setActiveOrder(77);
     uint256 outcomeBefore = _outcome.balanceOf(address(_adapter), _YES_ID);
     vm.expectRevert(abi.encodeWithSelector(LibDreamMarginErrors.RestingOrder.selector, uint128(77)));
     // The call is expected to revert before returning an execution result.

@@ -25,6 +25,26 @@ interface IDreamDexBinaryPool {
     uint256 lotSize;
   }
 
+  /// @notice One active order stored by the DreamDEX order book.
+  /// @param orderId Pool-scoped order identifier.
+  /// @param isBid Whether the order buys its selected outcome.
+  /// @param owner Account that placed the order.
+  /// @param userData Opaque caller data recorded on the order.
+  /// @param price YES-side limit price in raw pool units.
+  /// @param fullQuantity Original outcome quantity.
+  /// @param quantityRemaining Unfilled quantity still resting on the book.
+  /// @param expireTimestampNs Order expiry in nanoseconds.
+  struct Order {
+    uint128 orderId;
+    bool isBid;
+    address owner;
+    uint64 userData;
+    uint256 price;
+    uint256 fullQuantity;
+    uint256 quantityRemaining;
+    uint64 expireTimestampNs;
+  }
+
   /// @notice Current market generation bound to a recyclable binary pool.
   /// @param collateralToken Collateral token used for settlement and trades.
   /// @param market Binary market state contract.
@@ -72,6 +92,11 @@ interface IDreamDexBinaryPool {
   /// @return parameters Tick, minimum quantity, and lot-size values.
   function getOrderBookParameters() external view returns (OrderBookParameters memory parameters);
 
+  /// @notice Returns an active order or reverts with `IncorrectOrder()` when absent.
+  /// @param orderId Pool-scoped order identifier.
+  /// @return order Active order state.
+  function getOrder(uint128 orderId) external view returns (Order memory order);
+
   /// @notice Returns the latest permitted order expiry in nanoseconds.
   /// @return expiryTimestampNs Pool order-expiry ceiling in nanoseconds.
   function marketExpiryNs() external view returns (uint64 expiryTimestampNs);
@@ -91,7 +116,7 @@ interface IDreamDexBinaryPool {
   /// @param builderFeeBpsTimes1k Builder fee in basis points times one thousand.
   /// @param userData Opaque caller data recorded on the order.
   /// @return success Whether the venue accepted and executed the order.
-  /// @return id Venue order ID; immediate orders must not remain resting.
+  /// @return id Venue order ID; filled and cancelled immediate orders also receive IDs.
   function placeBinaryOrder(
     uint8 kind,
     uint256 price,

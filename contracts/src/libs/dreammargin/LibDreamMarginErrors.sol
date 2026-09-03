@@ -139,9 +139,14 @@ library LibDreamMarginErrors {
   /// @param orderType Immediate order type requested.
   error OrderRejected(address pool, uint8 orderType);
 
-  /// @notice Raised when an immediate order unexpectedly returns a resting identifier.
-  /// @param orderId Unexpected DreamDEX order identifier.
+  /// @notice Raised when an immediate order remains active after venue execution.
+  /// @param orderId Active DreamDEX order identifier.
   error RestingOrder(uint128 orderId);
+
+  /// @notice Raised when DreamMargin cannot prove that an immediate order is inactive.
+  /// @param pool Pool whose active-order read failed unexpectedly.
+  /// @param orderId DreamDEX order identifier being checked.
+  error OrderStateQueryFailed(address pool, uint128 orderId);
 
   /// @notice Raised when actual execution receives too few outcome shares.
   /// @param received Actual outcome shares received.

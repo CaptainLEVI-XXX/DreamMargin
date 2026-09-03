@@ -24,6 +24,11 @@ import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 abstract contract DreamDexAdapter {
   using SafeTransferLib for address;
 
+  /// @notice Exact revert selector used by DreamDEX when an order is not active.
+  /// @dev Truncating the hash to four bytes is the ABI definition of an error selector.
+  // forge-lint: disable-next-line(unsafe-typecast)
+  bytes4 private constant _INCORRECT_ORDER_SELECTOR = bytes4(keccak256("IncorrectOrder()"));
+
   /// @notice Canonical module record fields required for generation validation.
   /// @param oracleQuestionId Oracle question bound to the market.
   /// @param outcomeSlotCount Number of outcome slots.
@@ -529,7 +534,7 @@ abstract contract DreamDexAdapter {
   /// @param kind DreamDEX BUY/SELL YES/NO kind.
   /// @param deadlineNs Validated nanosecond deadline.
   /// @return success Venue acceptance and execution flag.
-  /// @return orderId Returned order identifier, required to remain zero.
+  /// @return orderId Returned pool-scoped order identifier.
   function _place(ImmediateOrder memory order, uint8 kind, uint64 deadlineNs)
     private
     returns (bool success, uint128 orderId)
@@ -548,17 +553,28 @@ abstract contract DreamDexAdapter {
       );
   }
 
-  /// @notice Rejects failed immediate execution or any returned resting-order identifier.
+  /// @notice Rejects failed execution and proves every returned order ID is inactive.
+  /// @dev DreamDEX assigns IDs to fully filled and cancelled immediate orders. A
+  ///      successful `getOrder` therefore identifies a live remainder, while the
+  ///      exact `IncorrectOrder()` revert proves that no active order remains.
   /// @param pool Pool that returned the result.
   /// @param orderType Immediate order type requested.
   /// @param success Venue acceptance flag.
   /// @param orderId Returned order identifier.
   function _requireImmediateSuccess(address pool, uint8 orderType, bool success, uint128 orderId)
     private
-    pure
+    view
   {
     if (!success) revert LibDreamMarginErrors.OrderRejected(pool, orderType);
-    if (orderId != 0) revert LibDreamMarginErrors.RestingOrder(orderId);
+    if (orderId == 0) return;
+
+    try IDreamDexBinaryPool(pool).getOrder(orderId) returns (IDreamDexBinaryPool.Order memory) {
+      revert LibDreamMarginErrors.RestingOrder(orderId);
+    } catch (bytes memory reason) {
+      if (keccak256(reason) != keccak256(abi.encodeWithSelector(_INCORRECT_ORDER_SELECTOR))) {
+        revert LibDreamMarginErrors.OrderStateQueryFailed(pool, orderId);
+      }
+    }
   }
 
   // -------------------------------------------------------------------------

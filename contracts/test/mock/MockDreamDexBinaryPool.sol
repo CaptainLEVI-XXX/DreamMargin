@@ -42,6 +42,9 @@ error MockDreamDexTransferFailed();
 /// @param feeBpsTimes1k Submitted builder fee.
 error MockDreamDexBuilderMissing(uint96 feeBpsTimes1k);
 
+/// @notice Mirrors DreamDEX's absence signal for an inactive order ID.
+error IncorrectOrder();
+
 /// @notice Local DreamDEX binary-pool execution model.
 /// @dev The payable selector matches DreamDEX, but every nonzero msg.value
 ///      reverts before acceptance, so the model cannot lock native value.
@@ -70,6 +73,9 @@ contract MockDreamDexBinaryPool is IDreamDexBinaryPool {
 
   /// @notice Order ID returned after an immediate execution.
   uint128 public returnedOrderId;
+
+  /// @notice Order ID exposed as active by `getOrder`, or zero when none is active.
+  uint128 public activeOrderId;
 
   /// @notice Last submitted binary kind.
   uint8 public lastKind;
@@ -134,6 +140,12 @@ contract MockDreamDexBinaryPool is IDreamDexBinaryPool {
     returnedOrderId = returnedOrderId_;
   }
 
+  /// @notice Selects whether a returned ID remains active after execution.
+  /// @param orderId_ Active order ID, or zero when no order rests.
+  function setActiveOrder(uint128 orderId_) external {
+    activeOrderId = orderId_;
+  }
+
   /// @notice Replaces one side of the visible order book.
   /// @param isBid True to replace bids and false to replace asks.
   /// @param levels Replacement ordered levels.
@@ -176,6 +188,21 @@ contract MockDreamDexBinaryPool is IDreamDexBinaryPool {
     returns (OrderBookParameters memory parameters)
   {
     parameters = _orderBookParameters;
+  }
+
+  /// @inheritdoc IDreamDexBinaryPool
+  function getOrder(uint128 orderId) external view override returns (Order memory order) {
+    if (orderId == 0 || orderId != activeOrderId) revert IncorrectOrder();
+    order = Order({
+      orderId: orderId,
+      isBid: true,
+      owner: msg.sender,
+      userData: lastUserData,
+      price: lastPrice,
+      fullQuantity: lastQuantity,
+      quantityRemaining: lastQuantity,
+      expireTimestampNs: lastDeadlineNs
+    });
   }
 
   /// @inheritdoc IDreamDexBinaryPool
