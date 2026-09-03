@@ -80,3 +80,38 @@
     display: none;
   }
 }
+
+.dm-header-right {
+  margin-left: auto;
+}
+
+.dm-wallet {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dm-space);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-13);
+}
+
+.dm-wallet-note {
+  color: var(--dm-text);
+}
+
+.dm-wallet-account {
+  border: 1px solid var(--dm-line);
+  border-radius: var(--dm-radius);
+  padding: calc(var(--dm-space) * 0.75) calc(var(--dm-space) * 1.5);
+  color: var(--dm-ink);
+}
+
+.dm-wallet-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--dm-up);
+  border-radius: 50%;
+}
+
+.dm-wallet-network {
+  color: var(--dm-text);
+  font-size: var(--dm-size-11);
+}

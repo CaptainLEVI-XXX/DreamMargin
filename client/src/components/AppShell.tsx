@@ -12,6 +12,8 @@ type Props = {
   route: Route;
   onNavigate: (route: Route) => void;
   children: ReactNode;
+  /** Wallet control rendered at the end of the header. */
+  wallet?: ReactNode;
 };
 
 /**
@@ -20,7 +22,7 @@ type Props = {
  * mark is white on the dark ground, never violet. No high-risk action such as
  * `Open` appears in global navigation.
  */
-export function AppShell({ route, onNavigate, children }: Props) {
+export function AppShell({ route, onNavigate, children, wallet }: Props) {
   const links = DESTINATIONS.map(({ route: target, label }) => (
     <a
       key={target}
@@ -47,6 +49,7 @@ export function AppShell({ route, onNavigate, children }: Props) {
         <nav className="dm-nav-desktop" aria-label="Primary">
           {links}
         </nav>
+        <span className="dm-header-right">{wallet}</span>
       </header>
 
       <main className="dm-main">{children}</main>

@@ -9,6 +9,7 @@ import "./components/marketCard.css";
 import "./components/positionCard.css";
 import "./components/leverageTiers.css";
 import "./components/protocolAlert.css";
+import "./components/freshness.css";
 import "./views/views.css";
 
 createRoot(document.getElementById("root")!).render(

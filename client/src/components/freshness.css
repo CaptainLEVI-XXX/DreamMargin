@@ -1,0 +1,29 @@
+.dm-freshness {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--dm-space) * 2);
+  font-size: var(--dm-size-11);
+  font-family: var(--dm-font-mono);
+  color: var(--dm-text);
+  border: 1px solid var(--dm-line);
+  border-radius: var(--dm-radius);
+  padding: var(--dm-space) calc(var(--dm-space) * 1.5);
+}
+
+.dm-freshness-state {
+  color: var(--dm-ink);
+}
+
+/* Colour escalates but never carries the meaning alone; the wording does. */
+.dm-freshness[data-state="delayed"] .dm-freshness-state,
+.dm-freshness[data-state="building"] .dm-freshness-state {
+  color: var(--dm-warn);
+}
+
+.dm-freshness[data-state="stale"] .dm-freshness-state {
+  color: var(--dm-down);
+}
+
+.dm-freshness-reason {
+  color: var(--dm-text);
+}
