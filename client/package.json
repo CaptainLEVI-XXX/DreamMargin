@@ -13,7 +13,9 @@
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
-    "generate:deployment": "node scripts/generate-deployment.mjs"
+    "generate:deployment": "node scripts/generate-deployment.mjs",
+    "generate:abis": "node scripts/generate-abis.mjs",
+    "generate": "npm run generate:deployment && npm run generate:abis"
   },
   "dependencies": {
     "react": "^19.1.1",
