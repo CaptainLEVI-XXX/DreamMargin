@@ -136,3 +136,85 @@
   font-size: var(--dm-size-13);
   padding: calc(var(--dm-space) * 1.25) var(--dm-space);
 }
+
+.dm-trade {
+  display: grid;
+  gap: calc(var(--dm-space) * 3);
+}
+
+@media (min-width: 1024px) {
+  .dm-trade {
+    grid-template-columns: 1fr var(--dm-panel-width);
+    align-items: start;
+  }
+}
+
+.dm-trade h1 {
+  margin-bottom: calc(var(--dm-space) * 2);
+}
+
+.dm-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--dm-space);
+  margin-bottom: calc(var(--dm-space) * 2);
+}
+
+/* YES and NO are a neutral-versus-selected pair, never green versus red:
+   §18.3 reserves those for value movement and margin state. */
+.dm-side-option {
+  border: 1px solid var(--dm-line);
+  border-radius: var(--dm-radius);
+  background: transparent;
+  color: var(--dm-text);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-13);
+  padding: calc(var(--dm-space) * 1.5);
+  cursor: pointer;
+  transition:
+    border-color var(--dm-transition),
+    background var(--dm-transition);
+}
+
+.dm-side-option[data-selected] {
+  border-color: var(--dm-accent);
+  background: var(--dm-accent-tint);
+  color: var(--dm-ink);
+}
+
+.dm-field {
+  display: grid;
+  gap: var(--dm-space);
+  font-size: var(--dm-size-13);
+  margin-bottom: calc(var(--dm-space) * 2);
+}
+
+.dm-field input {
+  background: var(--dm-surface);
+  border: 1px solid var(--dm-line);
+  border-radius: var(--dm-radius);
+  color: var(--dm-ink);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-17);
+  padding: calc(var(--dm-space) * 1.25) var(--dm-space);
+}
+
+.dm-trade-summary {
+  margin-top: calc(var(--dm-space) * 2);
+}
+
+.dm-trade-note {
+  font-size: var(--dm-size-11);
+  color: var(--dm-text);
+  margin: calc(var(--dm-space) * 2) 0;
+}
+
+.dm-inline-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--dm-ink);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}

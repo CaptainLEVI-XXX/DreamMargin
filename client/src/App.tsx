@@ -4,15 +4,16 @@ import { ProtocolAlert } from "./components/ProtocolAlert";
 import { WalletButton } from "./components/WalletButton";
 import type { MarketView } from "./domain/models";
 import { SCENARIOS, type ScenarioName } from "./fixtures/scenarios";
-import { BuilderView } from "./views/BuilderView";
+import { faucetIntent } from "./transactions/actions";
+import { useIntentRunner } from "./transactions/useIntentRunner";
 import { EarnView } from "./views/EarnView";
 import { MarketsView } from "./views/MarketsView";
 import { PositionsView } from "./views/PositionsView";
-import { useChain, useWallet } from "./web3/useChain";
+import { TradeView } from "./views/TradeView";
 import { useBalances } from "./web3/useBalances";
-import { GetStartedView } from "./views/GetStartedView";
+import { useChain, useWallet } from "./web3/useChain";
 
-const NAMES: ScenarioName[] = [
+const SCENARIO_NAMES: ScenarioName[] = [
   "healthy",
   "atRisk",
   "resolved",
@@ -21,25 +22,27 @@ const NAMES: ScenarioName[] = [
   "paused",
 ];
 
+/** Fixture switching is a development affordance, not part of the product. */
+const SHOW_SCENARIOS = import.meta.env.DEV;
+
 export default function App() {
   const [route, setRoute] = useState<Route>("markets");
   const [scenario, setScenario] = useState<ScenarioName>("healthy");
-  const [builder, setBuilder] = useState<MarketView | null>(null);
+  const [market, setMarket] = useState<MarketView | null>(null);
+
   const { wallet, connect, switchChain } = useWallet();
   const account = wallet.status === "connected" ? wallet.account : null;
   const chain = useChain(account);
 
   const fixture = SCENARIOS[scenario];
-  const primaryMarket = fixture.markets[0];
+  const primary = fixture.markets[0];
   const { balances, refresh } = useBalances(
     account,
-    primaryMarket.key.outcomeId,
-    primaryMarket.key.outcomeId + 1n,
+    primary.key.outcomeId,
+    primary.key.outcomeId + 1n,
   );
+  const faucet = useIntentRunner(account, { atomicBatch: false }, refresh);
 
-  // Market discovery and positions still come from fixtures: those need the
-  // indexer client and the position log scan, which land in the next plan. The
-  // vault and protocol mode are already live, so they override the fixture.
   const snapshot =
     chain.kind === "ready"
       ? {
@@ -53,25 +56,38 @@ export default function App() {
         }
       : fixture;
 
+  const withBalances = (m: MarketView): MarketView =>
+    account === null ? m : { ...m, ownedYes: balances.yes, ownedNo: balances.no };
+
   return (
     <AppShell
       route={route}
       onNavigate={(next) => {
-        setBuilder(null);
+        setMarket(null);
         setRoute(next);
       }}
-      wallet={<WalletButton state={wallet} onConnect={connect} onSwitchChain={switchChain} />}
+      wallet={
+        <WalletButton
+          state={wallet}
+          onConnect={connect}
+          onSwitchChain={switchChain}
+          collateral={account === null ? undefined : balances.collateral}
+          onFaucet={account === null ? undefined : () => faucet.run(faucetIntent(1_000_000_000n))}
+        />
+      }
     >
-      <label className="dm-scenario">
-        {chain.kind === "ready" ? "Fixture state (vault and mode are live)" : "Protocol state"}
-        <select value={scenario} onChange={(e) => setScenario(e.target.value as ScenarioName)}>
-          {NAMES.map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-      </label>
+      {SHOW_SCENARIOS ? (
+        <label className="dm-scenario">
+          Fixture state
+          <select value={scenario} onChange={(e) => setScenario(e.target.value as ScenarioName)}>
+            {SCENARIO_NAMES.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
       {chain.kind === "error" ? (
         <div className="dm-alert" role="status">
@@ -81,41 +97,28 @@ export default function App() {
         <ProtocolAlert protocol={snapshot.protocol} positions={snapshot.positions} />
       )}
 
-      {route === "start" && (
-        <GetStartedView
-          account={account}
-          balances={balances}
-          market={{ ...primaryMarket, ownedYes: balances.yes, ownedNo: balances.no }}
-          vault={snapshot.vault}
-          onSettled={refresh}
-        />
-      )}
-
       {route === "markets" &&
-        (builder === null ? (
+        (market === null ? (
           <MarketsView
-            snapshot={
-              account === null
-                ? snapshot
-                : {
-                    ...snapshot,
-                    markets: snapshot.markets.map((m, i) =>
-                      i === 0 ? { ...m, ownedYes: balances.yes, ownedNo: balances.no } : m,
-                    ),
-                  }
-            }
-            onOpenBuilder={setBuilder}
+            snapshot={{ ...snapshot, markets: snapshot.markets.map(withBalances) }}
+            onOpenBuilder={setMarket}
           />
         ) : (
-          <BuilderView
-            market={builder}
+          <TradeView
+            market={withBalances(market)}
             protocol={snapshot.protocol}
-            onBack={() => setBuilder(null)}
+            vault={snapshot.vault}
+            balances={balances}
+            book={{ asks: [], bids: [] }}
             account={account}
-            outcomeAllowance={balances.yesAllowance}
             onSettled={refresh}
+            onSupplyVault={() => {
+              setMarket(null);
+              setRoute("earn");
+            }}
           />
         ))}
+
       {route === "positions" && <PositionsView snapshot={snapshot} />}
       {route === "earn" && <EarnView vault={snapshot.vault} />}
     </AppShell>

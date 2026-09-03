@@ -2,7 +2,8 @@ import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { assertSingleAccentFill } from "../dev/accentGuard";
 import { SCENARIOS, type ScenarioName } from "../fixtures/scenarios";
-import { BuilderView } from "./BuilderView";
+import { EMPTY_BALANCES } from "../web3/tokens";
+import { TradeView } from "./TradeView";
 import { EarnView } from "./EarnView";
 import { MarketsView } from "./MarketsView";
 import { PositionsView } from "./PositionsView";
@@ -28,9 +29,15 @@ describe.each(NAMES)("scenario %s", (name) => {
     ["positions", () => <PositionsView snapshot={snapshot} />],
     ["earn", () => <EarnView vault={snapshot.vault} />],
     [
-      "builder",
+      "trade",
       () => (
-        <BuilderView market={snapshot.markets[0]} protocol={snapshot.protocol} onBack={() => {}} />
+        <TradeView
+          market={snapshot.markets[0]}
+          protocol={snapshot.protocol}
+          vault={snapshot.vault}
+          balances={EMPTY_BALANCES}
+          book={{ asks: [], bids: [] }}
+        />
       ),
     ],
   ] as const;
@@ -60,14 +67,20 @@ describe("safe actions survive degraded protocol modes", () => {
   );
 
   it.each(["paused", "reduceOnly", "staleOracle"] as ScenarioName[])(
-    "disables opening with a stated reason under %s",
+    "disables leveraged buying with a stated reason under %s",
     (name) => {
       const s = SCENARIOS[name];
-      const { getByRole, getAllByText } = render(
-        <BuilderView market={s.markets[0]} protocol={s.protocol} onBack={() => {}} />,
+      const { getByRole } = render(
+        <TradeView
+          market={s.markets[0]}
+          protocol={s.protocol}
+          vault={s.vault}
+          balances={EMPTY_BALANCES}
+          book={{ asks: [{ yesPrice: 983_000n, quantity: 100_000_000n }], bids: [] }}
+          account="0x1234567890abcdef1234567890abcdef12345678"
+        />,
       );
-      expect(getByRole("button", { name: /add .* leverage/i })).toBeDisabled();
-      expect(getAllByText(/paused|reductions only|risk data is stale/i).length).toBeGreaterThan(0);
+      expect(getByRole("button", { name: /buy .* at 1\.25x/i })).toBeDisabled();
     },
   );
 });

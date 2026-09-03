@@ -1,9 +1,8 @@
 import type { ReactNode } from "react";
 
-export type Route = "start" | "markets" | "positions" | "earn";
+export type Route = "markets" | "positions" | "earn";
 
 const DESTINATIONS: ReadonlyArray<{ route: Route; label: string }> = [
-  { route: "start", label: "Start" },
   { route: "markets", label: "Markets" },
   { route: "positions", label: "Positions" },
   { route: "earn", label: "Earn" },

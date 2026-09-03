@@ -1,0 +1,134 @@
+import { mulDivUp, quantizeDown } from "./amounts";
+
+/**
+ * Bounded order-book walk.
+ *
+ * §6.1: buying YES consumes YES asks; buying NO consumes the opposite side,
+ * represented by YES bids, where the NO price is `oneCollateral - yesPrice`.
+ * Every price argument sent to the venue stays in the YES convention.
+ *
+ * The walk is bounded by what the book actually shows. Anything beyond that is
+ * reported as a shortfall rather than assumed fillable, because the ask side on
+ * this deployment holds only a handful of shares.
+ */
+
+export type BookLevel = {
+  /** Always a YES price, in collateral native units. */
+  yesPrice: bigint;
+  /** Quantity resting at this level, in share native units. */
+  quantity: bigint;
+};
+
+export type Side = "yes" | "no";
+
+export type BookQuote = {
+  /** Shares the book can actually fill at or better than the limit. */
+  fillable: bigint;
+  /** Shares requested that the book cannot cover. */
+  shortfall: bigint;
+  /** Collateral needed for the fillable part, rounded up. */
+  cost: bigint;
+  /** Worst YES price touched, for the venue limit argument. */
+  limitYesPrice: bigint;
+  /** Average price paid per share, for display. */
+  averagePrice: bigint;
+};
+
+/**
+ * Walk the book for a buy.
+ *
+ * Levels must be supplied best-first: ascending YES price for an ask walk,
+ * descending for a bid walk. Quantities are quantized down to the lot so the
+ * venue cannot reject the resulting order.
+ */
+export function quoteBuy(input: {
+  side: Side;
+  levels: readonly BookLevel[];
+  quantity: bigint;
+  oneCollateral: bigint;
+  lotSize: bigint;
+}): BookQuote {
+  const wanted = quantizeDown(input.quantity, input.lotSize);
+  let remaining = wanted;
+  let cost = 0n;
+  let worstYes = 0n;
+
+  for (const level of input.levels) {
+    if (remaining === 0n) break;
+
+    const take = level.quantity < remaining ? level.quantity : remaining;
+    if (take === 0n) continue;
+
+    // The price actually paid depends on the side; the limit stays YES-denominated.
+    const paid = input.side === "yes" ? level.yesPrice : input.oneCollateral - level.yesPrice;
+    cost += mulDivUp(take, paid, input.oneCollateral);
+    remaining -= take;
+    worstYes = level.yesPrice;
+  }
+
+  const fillable = wanted - remaining;
+
+  return {
+    fillable,
+    shortfall: remaining,
+    cost,
+    limitYesPrice: worstYes,
+    averagePrice: fillable === 0n ? 0n : mulDivUp(cost, input.oneCollateral, fillable),
+  };
+}
+
+export type AcquisitionPlan = {
+  /** Shares to take from the book. */
+  fromBook: bigint;
+  /** Complete sets to mint for the remainder. */
+  fromMint: bigint;
+  /** Collateral for the book leg. */
+  bookCost: bigint;
+  /** Collateral for the mint leg: one whole unit per set. */
+  mintCost: bigint;
+  limitYesPrice: bigint;
+  /** Why minting is involved, when it is. */
+  note?: string;
+};
+
+/**
+ * Decide how to acquire `quantity` shares of one side.
+ *
+ * The book comes first because it is cheaper: a share costs its market price
+ * there, where minting a complete set always costs one whole unit of collateral
+ * and hands back the opposite outcome as well. Minting only covers what the book
+ * cannot, and the caller is told so explicitly.
+ */
+export function planAcquisition(input: {
+  side: Side;
+  levels: readonly BookLevel[];
+  quantity: bigint;
+  oneCollateral: bigint;
+  lotSize: bigint;
+  allowMint: boolean;
+}): AcquisitionPlan {
+  const quote = quoteBuy(input);
+
+  if (quote.shortfall === 0n || !input.allowMint) {
+    return {
+      fromBook: quote.fillable,
+      fromMint: 0n,
+      bookCost: quote.cost,
+      mintCost: 0n,
+      limitYesPrice: quote.limitYesPrice,
+    };
+  }
+
+  const other = input.side === "yes" ? "NO" : "YES";
+
+  return {
+    fromBook: quote.fillable,
+    fromMint: quote.shortfall,
+    bookCost: quote.cost,
+    // A complete set costs one whole collateral unit per share, whatever the
+    // market price is.
+    mintCost: mulDivUp(quote.shortfall, input.oneCollateral, input.oneCollateral),
+    limitYesPrice: quote.limitYesPrice,
+    note: `The book covers ${quote.fillable} of ${quote.fillable + quote.shortfall}. Minting the rest costs the full unit price and also gives you ${other} shares.`,
+  };
+}
