@@ -12,7 +12,8 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "generate:deployment": "node scripts/generate-deployment.mjs"
   },
   "dependencies": {
     "react": "^19.1.1",
