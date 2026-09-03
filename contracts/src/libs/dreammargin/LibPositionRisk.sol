@@ -151,6 +151,32 @@ library LibPositionRisk {
     );
   }
 
+  /// @notice Sizes debt so buying at a limit above mark stays within requested leverage.
+  /// @dev The limit is the conservative acquisition cost. When execution is at or
+  ///      below mark, the nominal debt target already satisfies the leverage bound.
+  /// @param equity Initial mark-valued owner equity.
+  /// @param leverageBps Requested gross leverage, where 10,000 is 1x.
+  /// @param markPrice Conservative collateral value per whole outcome.
+  /// @param limitSidePrice Maximum collateral cost per whole selected outcome.
+  /// @return debt Maximum debt rounded down before venue lot quantization.
+  function targetDebtAtLimitDown(
+    uint256 equity,
+    uint256 leverageBps,
+    uint256 markPrice,
+    uint256 limitSidePrice
+  ) internal pure returns (uint256 debt) {
+    debt = targetDebtDown(equity, leverageBps);
+    if (limitSidePrice <= markPrice) return debt;
+
+    uint256 leverageDelta = leverageBps - LibDreamMarginConstants.BPS;
+    uint256 discountedEquity = FixedPointMathLib.fullMulDiv(equity, leverageDelta, leverageBps);
+    uint256 discountedMark = FixedPointMathLib.fullMulDiv(markPrice, leverageDelta, leverageBps);
+    uint256 adjustedDebt = FixedPointMathLib.fullMulDiv(
+      discountedEquity, limitSidePrice, limitSidePrice - discountedMark
+    );
+    if (adjustedDebt < debt) debt = adjustedDebt;
+  }
+
   // -------------------------------------------------------------------------
   // Debt, interest, and vault shares
   // -------------------------------------------------------------------------

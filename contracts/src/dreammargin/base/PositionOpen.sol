@@ -96,8 +96,15 @@ contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
         "LEVERAGE_BPS", params.leverageBps, config.risk.maxLeverageBps
       );
     }
-    accounting.targetDebt =
-      LibPositionRisk.targetDebtDown(accounting.initialEquity, params.leverageBps);
+    if (
+      params.limitPrice == 0 || params.limitPrice >= generation.oneCollateral
+        || params.limitPrice % generation.orderBook.tickSize != 0
+    ) revert LibDreamMarginErrors.InvalidTick(params.limitPrice, generation.orderBook.tickSize);
+    uint256 sidePrice =
+      params.outcomeIndex == 0 ? params.limitPrice : generation.oneCollateral - params.limitPrice;
+    accounting.targetDebt = LibPositionRisk.targetDebtAtLimitDown(
+      accounting.initialEquity, params.leverageBps, mark, sidePrice
+    );
     if (accounting.targetDebt > params.maxCollateralIn) {
       revert LibDreamMarginErrors.ExcessiveCollateralIn(
         accounting.targetDebt, params.maxCollateralIn
@@ -105,12 +112,6 @@ contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
     }
     _requireDebtBounds(self, config, accounting.targetDebt);
 
-    if (
-      params.limitPrice == 0 || params.limitPrice >= generation.oneCollateral
-        || params.limitPrice % generation.orderBook.tickSize != 0
-    ) revert LibDreamMarginErrors.InvalidTick(params.limitPrice, generation.orderBook.tickSize);
-    uint256 sidePrice =
-      params.outcomeIndex == 0 ? params.limitPrice : generation.oneCollateral - params.limitPrice;
     uint256 quantity =
       FixedPointMathLib.fullMulDiv(accounting.targetDebt, generation.oneCollateral, sidePrice);
     quantity -= quantity % generation.orderBook.lotSize;
@@ -390,11 +391,9 @@ contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
       FixedPointMathLib.fullMulDivUp(grossValue, LibDreamMarginConstants.BPS, leverageCeiling);
     uint256 maximumLeverageDebt =
       grossValue > minimumLeverageEquity ? grossValue - minimumLeverageEquity : 0;
-    bool lostInitialEquity =
-      health.equity < initialEquity && initialEquity - health.equity > debtQuantum;
     bool exceededLeverage =
       debtAssets > maximumLeverageDebt && debtAssets - maximumLeverageDebt > debtQuantum;
-    if (lostInitialEquity || exceededLeverage) {
+    if (exceededLeverage) {
       revert LibDreamMarginErrors.InsufficientHealth(grossValue, debtAssets + initialEquity);
     }
   }

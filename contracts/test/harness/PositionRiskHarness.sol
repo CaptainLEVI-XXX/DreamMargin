@@ -68,6 +68,21 @@ contract PositionRiskHarness {
     debt = LibPositionRisk.targetDebtDown(equity, leverageBps);
   }
 
+  /// @notice Exposes spread-adjusted target debt calculation.
+  /// @param equity Initial equity.
+  /// @param leverageBps Gross leverage in basis points.
+  /// @param markPrice Conservative selected-outcome mark.
+  /// @param limitSidePrice Maximum selected-outcome execution price.
+  /// @return debt Spread-adjusted target debt rounded down.
+  function targetDebtAtLimitDown(
+    uint256 equity,
+    uint256 leverageBps,
+    uint256 markPrice,
+    uint256 limitSidePrice
+  ) external pure returns (uint256 debt) {
+    debt = LibPositionRisk.targetDebtAtLimitDown(equity, leverageBps, markPrice, limitSidePrice);
+  }
+
   /// @notice Exposes debt assets rounded up.
   /// @param shares Debt shares.
   /// @param indexWad Debt index in WAD.

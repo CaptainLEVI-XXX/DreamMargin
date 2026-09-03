@@ -109,6 +109,36 @@ def main() -> None:
         target = floor_fraction(Fraction(equity * (leverage_bps - BPS), BPS))
         leverage.append({"equity": equity, "leverage_bps": leverage_bps, "target_debt": target})
 
+    leveraged_execution = []
+    for equity, leverage_bps, mark_price, limit_side_price in [
+        (10_000_000, 20_000, 500_000, 500_000),
+        (10_000_000, 20_000, 500_000, 600_000),
+        (7_824_000, 12_500, 489_000, 551_000),
+    ]:
+        nominal = floor_fraction(Fraction(equity * (leverage_bps - BPS), BPS))
+        if limit_side_price <= mark_price:
+            target = nominal
+        else:
+            leverage_delta = leverage_bps - BPS
+            discounted_equity = floor_fraction(Fraction(equity * leverage_delta, leverage_bps))
+            discounted_mark = floor_fraction(Fraction(mark_price * leverage_delta, leverage_bps))
+            adjusted = floor_fraction(
+                Fraction(
+                    discounted_equity * limit_side_price,
+                    limit_side_price - discounted_mark,
+                )
+            )
+            target = min(nominal, adjusted)
+        leveraged_execution.append(
+            {
+                "equity": equity,
+                "leverage_bps": leverage_bps,
+                "mark_price": mark_price,
+                "limit_side_price": limit_side_price,
+                "target_debt": target,
+            }
+        )
+
     liquidation = []
     for debt_assets, bonus, price, available in [
         (1, 0, 600_000, 10**18),
@@ -158,6 +188,7 @@ def main() -> None:
         "interest": interest,
         "vault": vault,
         "leverage": leverage,
+        "leveraged_execution": leveraged_execution,
         "liquidation": liquidation,
         "book_levels": {
             "bids": [{"price": p, "quantity": q} for p, q in bids],

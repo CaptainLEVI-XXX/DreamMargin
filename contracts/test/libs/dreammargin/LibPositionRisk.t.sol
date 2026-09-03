@@ -92,6 +92,18 @@ contract LibPositionRiskTest is Test {
         _fixture.readUint(string.concat(root, ".next"))
       );
     }
+    for (uint256 i = 0; i < 3; ++i) {
+      string memory root = string.concat(".leveraged_execution[", vm.toString(i), "]");
+      assertEq(
+        _risk.targetDebtAtLimitDown(
+          _fixture.readUint(string.concat(root, ".equity")),
+          _fixture.readUint(string.concat(root, ".leverage_bps")),
+          _fixture.readUint(string.concat(root, ".mark_price")),
+          _fixture.readUint(string.concat(root, ".limit_side_price"))
+        ),
+        _fixture.readUint(string.concat(root, ".target_debt"))
+      );
+    }
   }
 
   /// @notice Matches independent empty, dust, single-level, multi-level, and incomplete walks.

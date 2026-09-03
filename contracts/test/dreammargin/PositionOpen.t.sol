@@ -346,20 +346,15 @@ contract PositionOpenTest is Test {
     assertEq(_outcome.balanceOf(address(_controller), _YES_ID), 0);
   }
 
-  /// @notice Rejects execution loss that pushes effective leverage above the requested ceiling.
-  function test_postTradeHealthUsesActualFillEconomics() external {
+  /// @notice Reduces borrowing so a spread-paying fill remains within requested leverage.
+  function test_spreadAdjustedDebtPreservesRequestedLeverage() external {
     IDreamMarginController.OpenParams memory params = _yesParams();
     params.limitPrice = 600_000;
-    params.minSharesOut = 16 * _ONE;
-    vm.prank(_OWNER);
-    vm.expectRevert(
-      abi.encodeWithSelector(
-        LibDreamMarginErrors.InsufficientHealth.selector, 18 * _ONE, 19_600_000
-      )
-    );
-    _controller.openPosition(params);
-    assertEq(_vault.performingDebt(), 0);
-    assertEq(_outcome.balanceOf(address(_controller), _YES_ID), 0);
+    params.minSharesOut = 14 * _ONE;
+    (uint256 positionId, uint256 sharesBought, uint256 debtAssets) = _open(params);
+    assertEq(positionId, 1);
+    assertEq(sharesBought, 14 * _ONE);
+    assertEq(debtAssets, 8_400_000);
   }
 
   /// @notice Rejects nominal borrowing above the generation's per-position debt ceiling.
