@@ -1,0 +1,57 @@
+.dm-progress {
+  border: 1px solid var(--dm-line);
+  border-radius: var(--dm-radius);
+  padding: calc(var(--dm-space) * 2);
+  margin-top: calc(var(--dm-space) * 2);
+  font-size: var(--dm-size-13);
+}
+
+.dm-progress[data-state="needs-review"] {
+  border-color: var(--dm-warn);
+}
+
+.dm-progress[data-state="error"] {
+  border-color: var(--dm-down);
+}
+
+.dm-progress-headline {
+  color: var(--dm-ink);
+  margin-bottom: var(--dm-space);
+}
+
+.dm-progress-steps {
+  list-style: none;
+  margin: 0 0 var(--dm-space);
+  padding: 0;
+  display: grid;
+  gap: var(--dm-space);
+}
+
+.dm-progress-steps li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: calc(var(--dm-space) * 1.5);
+  align-items: baseline;
+}
+
+.dm-progress-index,
+.dm-progress-status,
+.dm-progress-hash {
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  color: var(--dm-text);
+}
+
+.dm-progress-steps li[data-status="complete"] .dm-progress-status {
+  color: var(--dm-up);
+}
+
+.dm-progress-steps li[data-status="active"] span {
+  color: var(--dm-ink);
+}
+
+.dm-progress-violations {
+  margin: 0 0 var(--dm-space);
+  padding-left: calc(var(--dm-space) * 2);
+  color: var(--dm-text);
+}

@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { BuilderView } from "./BuilderView";
 import { SCENARIOS } from "../fixtures/scenarios";
@@ -54,5 +55,86 @@ describe("BuilderView", () => {
   it("has no separate review modal", () => {
     render(<BuilderView market={market} protocol={SCENARIOS.healthy.protocol} onBack={() => {}} />);
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+describe("BuilderView transaction intent", () => {
+  it("discloses two wallet confirmations when an approval is needed", () => {
+    render(<BuilderView market={market} protocol={SCENARIOS.healthy.protocol} onBack={() => {}} />);
+    expect(screen.getByText("2 wallet confirmations")).toBeVisible();
+  });
+
+  it("drops to one confirmation when the allowance already suffices", () => {
+    render(
+      <BuilderView
+        market={market}
+        protocol={SCENARIOS.healthy.protocol}
+        onBack={() => {}}
+        outcomeAllowance={market.ownedYes}
+      />,
+    );
+    expect(screen.getByText("1 wallet confirmation")).toBeVisible();
+  });
+
+  it("promises one confirmation on a batching wallet", () => {
+    render(
+      <BuilderView
+        market={market}
+        protocol={SCENARIOS.healthy.protocol}
+        onBack={() => {}}
+        capabilities={{ atomicBatch: true }}
+      />,
+    );
+    expect(screen.getByText("1 wallet confirmation")).toBeVisible();
+  });
+
+  it("shows the exact-id approval scope, not a global operator grant", () => {
+    render(<BuilderView market={market} protocol={SCENARIOS.healthy.protocol} onBack={() => {}} />);
+    expect(screen.getByText(/only, outcome id/i)).toBeVisible();
+  });
+
+  it("shows the minimum received before the action", () => {
+    render(<BuilderView market={market} protocol={SCENARIOS.healthy.protocol} onBack={() => {}} />);
+    expect(screen.getByText(/minimum received/i)).toBeVisible();
+  });
+
+  it("starts the whole intent from one application click", async () => {
+    render(<BuilderView market={market} protocol={SCENARIOS.healthy.protocol} onBack={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: /add .* leverage/i }));
+
+    // Progress replaces the button in the same surface: no second app
+    // confirmation, and no modal.
+    expect(screen.queryByRole("button", { name: /add .* leverage/i })).toBeNull();
+    expect(screen.getByText("Open 1.25x position")).toBeVisible();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("shows the approval step only when one is required", async () => {
+    const { unmount } = render(
+      <BuilderView market={market} protocol={SCENARIOS.healthy.protocol} onBack={() => {}} />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /add .* leverage/i }));
+    expect(screen.getByText(/approve .* YES only/i)).toBeVisible();
+    unmount();
+
+    render(
+      <BuilderView
+        market={market}
+        protocol={SCENARIOS.healthy.protocol}
+        onBack={() => {}}
+        outcomeAllowance={market.ownedYes}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /add .* leverage/i }));
+    expect(screen.queryByText(/approve .* YES only/i)).toBeNull();
+  });
+
+  it("keeps one solid violet object once progress replaces the button", async () => {
+    const { container } = render(
+      <BuilderView market={market} protocol={SCENARIOS.healthy.protocol} onBack={() => {}} />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /add .* leverage/i }));
+    const { assertSingleAccentFill } = await import("../dev/accentGuard");
+    expect(() => assertSingleAccentFill(container)).not.toThrow();
   });
 });
