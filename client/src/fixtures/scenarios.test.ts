@@ -46,6 +46,10 @@ describe("SCENARIOS", () => {
     expect(SCENARIOS.atRisk.positions[0].bufferBps).toBeLessThan(1_000n);
   });
 
+  it("keeps the healthy position genuinely comfortable, not one step from a warning", () => {
+    expect(SCENARIOS.healthy.positions[0].bufferBps).toBeGreaterThanOrEqual(2_500n);
+  });
+
   it("sets the protocol mode for degraded scenarios", () => {
     expect(SCENARIOS.reduceOnly.protocol.mode).toBe(ProtocolMode.ReduceOnly);
     expect(SCENARIOS.paused.protocol.mode).toBe(ProtocolMode.Paused);

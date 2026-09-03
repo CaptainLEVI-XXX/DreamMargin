@@ -98,7 +98,7 @@ const healthyPosition: PositionView = {
   marketValue: 236_220_000n,
   riskValue: 224_100_000n,
   unrealizedPnl: 18_400_000n,
-  bufferBps: 2_400n,
+  bufferBps: 4_000n,
   liquidationPrice: 480_000n,
   accruedFinancing: 1_840_000n,
   annualRateBps: 500n,
