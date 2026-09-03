@@ -1,0 +1,26 @@
+.dm-tiers {
+  display: flex;
+  gap: var(--dm-space);
+  flex-wrap: wrap;
+}
+
+.dm-tier {
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-13);
+  border: 1px solid var(--dm-line);
+  border-radius: var(--dm-radius);
+  background: transparent;
+  color: var(--dm-text);
+  padding: var(--dm-space) calc(var(--dm-space) * 1.5);
+  cursor: pointer;
+  transition:
+    border-color var(--dm-transition),
+    background var(--dm-transition);
+}
+
+/* Violet outline and tint, never a solid fill. §18.5 */
+.dm-tier[data-selected] {
+  border-color: var(--dm-accent);
+  background: var(--dm-accent-tint);
+  color: var(--dm-ink);
+}
