@@ -12,6 +12,7 @@ import { PositionsView } from "./views/PositionsView";
 import { TradeView } from "./views/TradeView";
 import { useBalances } from "./web3/useBalances";
 import { useChain, useWallet } from "./web3/useChain";
+import { usePositions } from "./web3/usePositions";
 
 const SCENARIO_NAMES: ScenarioName[] = [
   "healthy",
@@ -42,6 +43,17 @@ export default function App() {
     primary.key.outcomeId + 1n,
   );
   const faucet = useIntentRunner(account, { atomicBatch: false }, refresh);
+  const { state: positionsState, refresh: refreshPositions } = usePositions(account, primary);
+
+  const refreshAll = () => {
+    refresh();
+    refreshPositions();
+  };
+
+  // Sample positions render only when the chain has not produced real ones, and
+  // they are labelled and disabled so nobody clicks an action that would revert.
+  const livePositions = positionsState.kind === "ready" ? positionsState.positions : null;
+  const usingSample = account === null || livePositions === null;
 
   const snapshot =
     chain.kind === "ready"
@@ -111,7 +123,7 @@ export default function App() {
             balances={balances}
             book={{ asks: [], bids: [] }}
             account={account}
-            onSettled={refresh}
+            onSettled={refreshAll}
             onSupplyVault={() => {
               setMarket(null);
               setRoute("earn");
@@ -119,7 +131,16 @@ export default function App() {
           />
         ))}
 
-      {route === "positions" && <PositionsView snapshot={snapshot} />}
+      {route === "positions" && (
+        <PositionsView
+          snapshot={usingSample ? snapshot : { ...snapshot, positions: livePositions }}
+          account={account}
+          collateralAllowance={balances.collateralAllowance}
+          outcomeAllowance={balances.yesAllowance}
+          onSettled={refreshAll}
+          sample={usingSample}
+        />
+      )}
       {route === "earn" && <EarnView vault={snapshot.vault} />}
     </AppShell>
   );

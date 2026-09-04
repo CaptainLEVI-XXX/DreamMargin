@@ -26,7 +26,12 @@ describe.each(NAMES)("scenario %s", (name) => {
   const snapshot = SCENARIOS[name];
   const screens = [
     ["markets", () => <MarketsView snapshot={snapshot} onOpenBuilder={() => {}} />],
-    ["positions", () => <PositionsView snapshot={snapshot} />],
+    [
+      "positions",
+      () => (
+        <PositionsView snapshot={snapshot} account={"0x1234567890abcdef1234567890abcdef12345678"} />
+      ),
+    ],
     ["earn", () => <EarnView vault={snapshot.vault} />],
     [
       "trade",
@@ -61,7 +66,12 @@ describe("safe actions survive degraded protocol modes", () => {
   it.each(["paused", "reduceOnly", "staleOracle"] as ScenarioName[])(
     "keeps repay enabled under %s",
     (name) => {
-      const { getByRole } = render(<PositionsView snapshot={SCENARIOS[name]} />);
+      const { getByRole } = render(
+        <PositionsView
+          snapshot={SCENARIOS[name]}
+          account={"0x1234567890abcdef1234567890abcdef12345678"}
+        />,
+      );
       expect(getByRole("button", { name: "Repay" })).toBeEnabled();
     },
   );

@@ -27,6 +27,8 @@ type Props = {
   outcomeAllowance?: bigint;
   capabilities?: WalletCapabilities;
   onSettled?: () => void;
+  /** Sample data cannot be acted on: the position id does not exist on-chain. */
+  sample?: boolean;
 };
 
 /**
@@ -43,6 +45,7 @@ export function PositionCard({
   outcomeAllowance = 0n,
   capabilities = { atomicBatch: false },
   onSettled,
+  sample = false,
 }: Props) {
   const { market } = position;
   const { intent, run, reset } = useIntentRunner(account, capabilities, onSettled);
@@ -55,6 +58,15 @@ export function PositionCard({
     beforeReduceOnlyCutoff: true,
   });
   const resolved = position.status === PositionStatus.Resolved;
+
+  // Every action signs against this exact position id, so it needs both a
+  // connected wallet and a position that actually exists.
+  const actionBlocked = sample
+    ? "Sample position; open a real one to act"
+    : account === null
+      ? "Connect a wallet to act on this position"
+      : undefined;
+  const usable = actionBlocked === undefined;
 
   return (
     <Card>
@@ -101,7 +113,8 @@ export function PositionCard({
         {resolved ? (
           <Button
             variant={primary ? "primary" : "secondary"}
-            disabled={!availability.canSettle}
+            disabled={!availability.canSettle || !usable}
+            disabledReason={actionBlocked}
             onClick={() => run(settleIntent(position.positionId))}
           >
             Settle position
@@ -110,7 +123,8 @@ export function PositionCard({
           <>
             <Button
               variant={primary ? "primary" : "secondary"}
-              disabled={!availability.canRepay}
+              disabled={!availability.canRepay || !usable}
+              disabledReason={actionBlocked}
               onClick={() =>
                 run(repayIntent(position.positionId, position.debtAssets, collateralAllowance))
               }
@@ -119,7 +133,8 @@ export function PositionCard({
             </Button>
             <Button
               variant="secondary"
-              disabled={!availability.canAddCollateral}
+              disabled={!availability.canAddCollateral || !usable}
+              disabledReason={actionBlocked}
               onClick={() =>
                 run(
                   addCollateralIntent(
@@ -135,8 +150,11 @@ export function PositionCard({
             </Button>
             <Button
               variant="secondary"
-              disabled={!availability.canDeleverage}
-              disabledReason={availability.canDeleverage ? undefined : "Past the reduction cutoff"}
+              disabled={!availability.canDeleverage || !usable}
+              disabledReason={
+                actionBlocked ??
+                (availability.canDeleverage ? undefined : "Past the reduction cutoff")
+              }
               onClick={() =>
                 run(
                   deleverageIntent({
@@ -156,7 +174,8 @@ export function PositionCard({
             </Button>
             <Button
               variant="secondary"
-              disabled={!availability.canClose}
+              disabled={!availability.canClose || !usable}
+              disabledReason={actionBlocked}
               onClick={() =>
                 run(
                   closeToOutcomeIntent(

@@ -12,7 +12,24 @@ function attentionRank(p: PositionView): number {
   return 4;
 }
 
-export function PositionsView({ snapshot }: { snapshot: AppSnapshot }) {
+type Props = {
+  snapshot: AppSnapshot;
+  account?: `0x${string}` | null;
+  collateralAllowance?: bigint;
+  outcomeAllowance?: bigint;
+  onSettled?: () => void;
+  /** Set when positions are sample data and cannot be acted on. */
+  sample?: boolean;
+};
+
+export function PositionsView({
+  snapshot,
+  account = null,
+  collateralAllowance = 0n,
+  outcomeAllowance = 0n,
+  onSettled,
+  sample = false,
+}: Props) {
   const ordered = [...snapshot.positions].sort((a, b) => attentionRank(a) - attentionRank(b));
   const decimals = snapshot.vault.collateralDecimals;
   const equity = ordered.reduce((sum, p) => sum + p.equity, 0n);
@@ -33,6 +50,27 @@ export function PositionsView({ snapshot }: { snapshot: AppSnapshot }) {
         <span>Isolated positions</span>
       </div>
 
+      {account === null ? (
+        <p className="dm-empty-note">
+          Connect a wallet to see your positions. Repay, add collateral, and close act on your own
+          positions, so they need a connected account.
+        </p>
+      ) : null}
+
+      {sample && account !== null ? (
+        <p className="dm-empty-note">
+          These are sample positions for layout. They do not exist on-chain, so their actions are
+          disabled. Open a position from a market to see a real one here.
+        </p>
+      ) : null}
+
+      {!sample && account !== null && ordered.length === 0 ? (
+        <p className="dm-empty-note">
+          No open positions. Buy an outcome on a market, then choose a multiple above 1x to open
+          one.
+        </p>
+      ) : null}
+
       <div className="dm-position-list">
         {ordered.map((p, i) => (
           <PositionCard
@@ -40,6 +78,11 @@ export function PositionsView({ snapshot }: { snapshot: AppSnapshot }) {
             position={p}
             mode={snapshot.protocol.mode}
             primary={i === 0}
+            account={account}
+            collateralAllowance={collateralAllowance}
+            outcomeAllowance={outcomeAllowance}
+            onSettled={onSettled}
+            sample={sample}
           />
         ))}
       </div>

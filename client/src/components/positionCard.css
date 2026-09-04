@@ -48,3 +48,13 @@
   gap: var(--dm-space);
   margin-top: calc(var(--dm-space) * 2);
 }
+
+.dm-empty-note {
+  font-size: var(--dm-size-13);
+  color: var(--dm-text);
+  border: 1px solid var(--dm-line);
+  border-radius: var(--dm-radius);
+  padding: calc(var(--dm-space) * 2);
+  margin-bottom: calc(var(--dm-space) * 2);
+  max-width: none;
+}
