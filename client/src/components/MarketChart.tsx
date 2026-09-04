@@ -1,43 +1,39 @@
+import { useState } from "react";
 import { formatUnits } from "../domain/amounts";
 import type { IndexPoint, IndexSeries } from "../data/priceFeed";
 import { Value } from "./Value";
 
 /**
- * The builder chart. Design FS-1.
+ * The market chart. Design FS-1.
  *
- * One component, two configurations. Here it plots the underlying index price —
- * dense and streaming — with the market's opening level as a horizontal rule, so
- * distance to strike is legible at a glance. It answers: is the thing I am
- * betting on actually happening?
+ * Plots the underlying index price as candles, with the market's opening level
+ * as a rule so distance to strike is legible at a glance. The index series is
+ * used rather than the YES probability because the probability side carries a
+ * handful of trades where this carries thousands of ticks, and a candlestick of
+ * three isolated prints implies a trend those prints cannot support.
  *
- * The liquidation boundary is deliberately absent. It lives on the probability
- * axis in cents, and there is no fixed mapping from an underlying price to a YES
- * probability — the market decides that. Drawing "liquidation near 48c" over a
- * dollar series would be meaningless, so the position terminal uses the safety
- * buffer bar instead.
- *
- * Drawn as inline SVG rather than a charting library: the hairline dark system
- * needs no axis chrome, and this keeps the bundle free of a dependency whose
- * defaults would have to be fought.
+ * The liquidation boundary is deliberately absent: it lives on the probability
+ * axis in cents, and no fixed mapping exists from an underlying price to a
+ * probability, so drawing it over a dollar series would be meaningless.
  */
 
 type Props = {
   series: IndexSeries;
-  /** Index level at trading open, or null when unknown. */
   strike: bigint | null;
   asset: string;
   height?: number;
 };
 
-const WIDTH = 640;
+const WIDTH = 720;
+const PAD_TOP = 8;
 
-function project(points: IndexPoint[], strike: bigint | null, height: number) {
-  const lows = points.map((p) => p.low);
-  const highs = points.map((p) => p.high);
-  let min = lows.reduce((a, b) => (b < a ? b : a));
-  let max = highs.reduce((a, b) => (b > a ? b : a));
+type Scale = { x: (i: number) => number; y: (v: bigint) => number; bodyWidth: number };
 
-  // Keep the strike on screen; a rule drawn off-canvas tells the user nothing.
+function scaleFor(points: IndexPoint[], strike: bigint | null, height: number): Scale {
+  let min = points.reduce((a, p) => (p.low < a ? p.low : a), points[0].low);
+  let max = points.reduce((a, p) => (p.high > a ? p.high : a), points[0].high);
+
+  // Keep the strike on canvas; a rule drawn off-screen tells the reader nothing.
   if (strike !== null) {
     if (strike < min) min = strike;
     if (strike > max) max = strike;
@@ -48,19 +44,19 @@ function project(points: IndexPoint[], strike: bigint | null, height: number) {
   const lo = min - pad;
   const hi = max + pad;
   const range = hi - lo === 0n ? 1n : hi - lo;
+  const plot = height - PAD_TOP * 2;
 
-  // Scale to a fixed-point integer before the single float conversion, so the
-  // bigint prices never pass through a float at full magnitude.
-  const y = (v: bigint) => {
-    const scaled = ((hi - v) * 10_000n) / range;
-    return (Number(scaled) / 10_000) * height;
+  return {
+    // Scale to fixed point before the single float conversion, so full-magnitude
+    // bigint prices never pass through a float.
+    y: (v: bigint) => PAD_TOP + (Number(((hi - v) * 10_000n) / range) / 10_000) * plot,
+    x: (i: number) => ((i + 0.5) / points.length) * WIDTH,
+    bodyWidth: Math.max(1.5, (WIDTH / points.length) * 0.6),
   };
-  const x = (i: number) => (points.length === 1 ? WIDTH : (i / (points.length - 1)) * WIDTH);
-
-  return { x, y, lo, hi };
 }
 
-export function MarketChart({ series, strike, asset, height = 160 }: Props) {
+export function MarketChart({ series, strike, asset, height = 220 }: Props) {
+  const [hover, setHover] = useState<number | null>(null);
   const { points, decimals } = series;
 
   if (points.length < 2) {
@@ -71,25 +67,21 @@ export function MarketChart({ series, strike, asset, height = 160 }: Props) {
     );
   }
 
-  const { x, y } = project(points, strike, height);
-  const path = points
-    .map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.close).toFixed(1)}`)
-    .join(" ");
-  const last = points[points.length - 1];
-  const first = points[0];
-  const up = last.close >= first.close;
-  const aboveStrike = strike === null ? null : last.close >= strike;
+  const s = scaleFor(points, strike, height);
+  const active = hover === null ? points[points.length - 1] : points[hover];
+  const aboveStrike = strike === null ? null : active.close >= strike;
+  const fmt = (v: bigint) => formatUnits(v, decimals, 2);
 
   return (
     <figure className="dm-chart">
       <figcaption className="dm-chart-head">
         <span>
-          {asset} index <Value>{formatUnits(last.close, decimals, 2)}</Value>
+          {asset} <Value>{fmt(active.close)}</Value>
+          {hover === null ? null : <span className="dm-chart-scrub"> at cursor</span>}
         </span>
         {strike === null ? null : (
           <span>
-            Opening level <Value>{formatUnits(strike, decimals, 2)}</Value>
-            {" · "}
+            Opening <Value>{fmt(strike)}</Value>{" "}
             <span className="dm-chart-verdict" data-above={aboveStrike === true}>
               {aboveStrike === true ? "above" : "below"}
             </span>
@@ -103,26 +95,58 @@ export function MarketChart({ series, strike, asset, height = 160 }: Props) {
         role="img"
         aria-label={
           strike === null
-            ? `${asset} index price over the trading window`
+            ? `${asset} index price`
             : `${asset} index price, currently ${aboveStrike === true ? "above" : "below"} the opening level`
         }
+        onMouseLeave={() => setHover(null)}
+        onMouseMove={(event) => {
+          const box = event.currentTarget.getBoundingClientRect();
+          const ratio = (event.clientX - box.left) / box.width;
+          const i = Math.floor(ratio * points.length);
+          setHover(i < 0 ? 0 : i >= points.length ? points.length - 1 : i);
+        }}
       >
         {strike === null ? null : (
           <line
             x1={0}
             x2={WIDTH}
-            y1={y(strike)}
-            y2={y(strike)}
+            y1={s.y(strike)}
+            y2={s.y(strike)}
             className="dm-chart-strike"
-            strokeDasharray="3 3"
+            strokeDasharray="4 4"
           />
         )}
-        <path d={path} className="dm-chart-line" data-up={up} fill="none" />
+
+        {points.map((p, i) => {
+          const up = p.close >= p.open;
+          const top = s.y(up ? p.close : p.open);
+          const bottom = s.y(up ? p.open : p.close);
+          return (
+            <g key={String(p.time)} data-up={up} className="dm-candle">
+              <line x1={s.x(i)} x2={s.x(i)} y1={s.y(p.high)} y2={s.y(p.low)} className="dm-wick" />
+              <rect
+                x={s.x(i) - s.bodyWidth / 2}
+                y={top}
+                width={s.bodyWidth}
+                height={Math.max(1, bottom - top)}
+                className="dm-body"
+              />
+            </g>
+          );
+        })}
+
+        {hover === null ? null : (
+          <line x1={s.x(hover)} x2={s.x(hover)} y1={0} y2={height} className="dm-chart-cursor" />
+        )}
       </svg>
 
       <figcaption className="dm-chart-foot">
         <span>
-          {points.length} buckets · {points.reduce((sum, p) => sum + p.count, 0)} ticks
+          O <Value>{fmt(active.open)}</Value> H <Value>{fmt(active.high)}</Value> L{" "}
+          <Value>{fmt(active.low)}</Value> C <Value>{fmt(active.close)}</Value>
+        </span>
+        <span>
+          <Value>{active.count}</Value> ticks
         </span>
       </figcaption>
     </figure>

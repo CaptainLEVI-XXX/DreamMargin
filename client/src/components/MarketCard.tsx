@@ -21,7 +21,16 @@ function timeRemaining(expiry: bigint, now: bigint): string {
   if (seconds <= 0n) return "Trading closed";
   const hours = seconds / 3_600n;
   if (hours >= 24n) return `Ends in ${hours / 24n}d ${hours % 24n}h`;
-  return `Ends in ${hours}h`;
+  if (hours >= 1n) return `Ends in ${hours}h`;
+  return `Ends in ${seconds / 60n}m`;
+}
+
+/** How often this series rolls a new market. */
+function intervalLabel(tradingStart: bigint, expiry: bigint): string {
+  const seconds = expiry - tradingStart;
+  if (seconds >= 86_400n) return `${seconds / 86_400n}d market`;
+  if (seconds >= 3_600n) return `${seconds / 3_600n}h market`;
+  return `${seconds / 60n}m market`;
 }
 
 /** One market, in frontend-spec §7.2's field order. */
@@ -33,7 +42,11 @@ export function MarketCard({ market, availability, owned, primary, onUse }: Prop
     <Card>
       <div className="dm-market-head">
         <h3>{market.question}</h3>
-        <span className="dm-market-time">{timeRemaining(market.expiry, market.tradingStart)}</span>
+        <span className="dm-market-time">
+          {intervalLabel(market.tradingStart, market.expiry)}
+          {" · "}
+          {timeRemaining(market.expiry, market.tradingStart)}
+        </span>
       </div>
 
       <div className="dm-market-prices">
@@ -52,9 +65,17 @@ export function MarketCard({ market, availability, owned, primary, onUse }: Prop
             {owned === 0n ? "none" : `${formatUnits(owned, market.collateralDecimals)} YES`}
           </Value>
         </dd>
-        <dt>Risk tier</dt>
+        <dt>Leverage</dt>
         <dd>
-          {market.riskTier} · up to <Value>{formatMultiple(market.maxLeverageBps)}</Value>
+          {availability.canOpen || availability.openBlockedReason === undefined ? (
+            <>
+              {market.riskTier} · up to <Value>{formatMultiple(market.maxLeverageBps)}</Value>
+            </>
+          ) : (
+            // A market DreamMargin has not registered is still tradable; only
+            // leverage is unavailable, and saying which avoids looking broken.
+            <>Not available · buy only</>
+          )}
         </dd>
         <dt>Available to borrow</dt>
         <dd>

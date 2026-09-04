@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { MarketChart } from "./MarketChart";
 import { strikeAt, type IndexSeries } from "../data/priceFeed";
@@ -27,16 +27,49 @@ describe("MarketChart", () => {
     expect(screen.getByText(/not enough price history/i)).toBeVisible();
   });
 
-  it("plots the index price with the asset named", () => {
-    render(<MarketChart series={series([2500, 2510, 2512])} strike={null} asset="ETH" />);
-    expect(screen.getByText(/ETH index/)).toBeVisible();
-    expect(screen.getByRole("img")).toBeVisible();
+  it("plots one candle per bucket with the asset named", () => {
+    const { container } = render(
+      <MarketChart series={series([2500, 2510, 2512])} strike={null} asset="ETH" />,
+    );
+    expect(screen.getByText("ETH")).toBeVisible();
+    expect(container.querySelectorAll(".dm-candle")).toHaveLength(3);
+  });
+
+  it("colours each candle by its own direction, not the series trend", () => {
+    const s = series([2500, 2510, 2505]);
+    // Force a down candle: close below open on the last bucket.
+    s.points[2] = { ...s.points[2], open: 2520n * E18, close: 2505n * E18 };
+    const { container } = render(<MarketChart series={s} strike={null} asset="ETH" />);
+    const candles = container.querySelectorAll(".dm-candle");
+    expect(candles[2].getAttribute("data-up")).toBe("false");
+  });
+
+  it("shows OHLC and tick count for the newest bucket by default", () => {
+    const { container } = render(
+      <MarketChart series={series([2500, 2510])} strike={null} asset="ETH" />,
+    );
+    const foot = container.querySelector(".dm-chart-foot")?.textContent ?? "";
+    expect(foot).toMatch(/O\s*2510/);
+    expect(foot).toMatch(/C\s*2510/);
+    expect(foot).toMatch(/ticks/);
+  });
+
+  it("scrubs to the hovered candle", async () => {
+    const { container } = render(
+      <MarketChart series={series([2500, 2600, 2700])} strike={null} asset="ETH" />,
+    );
+    const svg = container.querySelector("svg") as SVGElement;
+    svg.getBoundingClientRect = () => ({ left: 0, width: 300, top: 0, height: 220 }) as DOMRect;
+    fireEvent.mouseMove(svg, { clientX: 10 });
+    expect(screen.getByText(/at cursor/i)).toBeVisible();
+    fireEvent.mouseLeave(svg);
+    expect(screen.queryByText(/at cursor/i)).toBeNull();
   });
 
   it("draws the opening level and says which side price is on", () => {
     const s = series([2500, 2510, 2520]);
     render(<MarketChart series={s} strike={2505n * E18} asset="ETH" />);
-    expect(screen.getByText(/opening level/i)).toBeVisible();
+    expect(screen.getByText(/opening/i)).toBeVisible();
     expect(screen.getByText("above")).toBeVisible();
   });
 
@@ -66,11 +99,6 @@ describe("MarketChart", () => {
     expect(screen.getByRole("img")).toHaveAccessibleName(/above the opening level/i);
   });
 
-  it("reports how much data backs the line", () => {
-    render(<MarketChart series={series([1, 2, 3])} strike={null} asset="ETH" />);
-    expect(screen.getByText(/3 buckets · 90 ticks/)).toBeVisible();
-  });
-
   it("keeps the strike on canvas when it sits outside the price range", () => {
     const { container } = render(
       <MarketChart series={series([2500, 2510])} strike={9_000n * E18} asset="ETH" height={100} />,
@@ -85,8 +113,10 @@ describe("MarketChart", () => {
     const { container } = render(
       <MarketChart series={series([2500, 2500, 2500])} strike={2500n * E18} asset="ETH" />,
     );
-    const path = container.querySelector(".dm-chart-line")?.getAttribute("d") ?? "";
-    expect(path).not.toMatch(/NaN|Infinity/);
+    for (const rect of container.querySelectorAll(".dm-body")) {
+      expect(rect.getAttribute("y")).not.toMatch(/NaN|Infinity/);
+      expect(rect.getAttribute("height")).not.toMatch(/NaN|Infinity/);
+    }
   });
 
   it("carries no solid violet fill", () => {

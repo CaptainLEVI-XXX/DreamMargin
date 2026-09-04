@@ -27,8 +27,6 @@ type Props = {
   outcomeAllowance?: bigint;
   capabilities?: WalletCapabilities;
   onSettled?: () => void;
-  /** Sample data cannot be acted on: the position id does not exist on-chain. */
-  sample?: boolean;
 };
 
 /**
@@ -45,7 +43,6 @@ export function PositionCard({
   outcomeAllowance = 0n,
   capabilities = { atomicBatch: false },
   onSettled,
-  sample = false,
 }: Props) {
   const { market } = position;
   const { intent, run, reset } = useIntentRunner(account, capabilities, onSettled);
@@ -59,13 +56,8 @@ export function PositionCard({
   });
   const resolved = position.status === PositionStatus.Resolved;
 
-  // Every action signs against this exact position id, so it needs both a
-  // connected wallet and a position that actually exists.
-  const actionBlocked = sample
-    ? "Sample position; open a real one to act"
-    : account === null
-      ? "Connect a wallet to act on this position"
-      : undefined;
+  // Every action signs against this exact position id, which the wallet must own.
+  const actionBlocked = account === null ? "Connect a wallet to act on this position" : undefined;
   const usable = actionBlocked === undefined;
 
   return (

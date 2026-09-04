@@ -50,10 +50,10 @@ export default function App() {
     refreshPositions();
   };
 
-  // Sample positions render only when the chain has not produced real ones, and
-  // they are labelled and disabled so nobody clicks an action that would revert.
-  const livePositions = positionsState.kind === "ready" ? positionsState.positions : null;
-  const usingSample = account === null || livePositions === null;
+  // Positions are only ever what the chain reports for this wallet. There is no
+  // sample fallback: a card that cannot be acted on is worse than no card.
+  const livePositions = positionsState.kind === "ready" ? positionsState.positions : [];
+  const positionsLoading = account !== null && positionsState.kind !== "ready";
 
   const snapshot =
     chain.kind === "ready"
@@ -106,7 +106,7 @@ export default function App() {
           <span>{chain.message}</span>
         </div>
       ) : (
-        <ProtocolAlert protocol={snapshot.protocol} positions={snapshot.positions} />
+        <ProtocolAlert protocol={snapshot.protocol} positions={livePositions} />
       )}
 
       {route === "markets" &&
@@ -133,12 +133,12 @@ export default function App() {
 
       {route === "positions" && (
         <PositionsView
-          snapshot={usingSample ? snapshot : { ...snapshot, positions: livePositions }}
+          snapshot={{ ...snapshot, positions: livePositions }}
           account={account}
           collateralAllowance={balances.collateralAllowance}
           outcomeAllowance={balances.yesAllowance}
           onSettled={refreshAll}
-          sample={usingSample}
+          loading={positionsLoading}
         />
       )}
       {route === "earn" && <EarnView vault={snapshot.vault} />}

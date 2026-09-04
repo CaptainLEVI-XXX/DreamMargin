@@ -18,8 +18,8 @@ type Props = {
   collateralAllowance?: bigint;
   outcomeAllowance?: bigint;
   onSettled?: () => void;
-  /** Set when positions are sample data and cannot be acted on. */
-  sample?: boolean;
+  /** True while positions are still being read from the chain. */
+  loading?: boolean;
 };
 
 export function PositionsView({
@@ -28,7 +28,7 @@ export function PositionsView({
   collateralAllowance = 0n,
   outcomeAllowance = 0n,
   onSettled,
-  sample = false,
+  loading = false,
 }: Props) {
   const ordered = [...snapshot.positions].sort((a, b) => attentionRank(a) - attentionRank(b));
   const decimals = snapshot.vault.collateralDecimals;
@@ -57,14 +57,11 @@ export function PositionsView({
         </p>
       ) : null}
 
-      {sample && account !== null ? (
-        <p className="dm-empty-note">
-          These are sample positions for layout. They do not exist on-chain, so their actions are
-          disabled. Open a position from a market to see a real one here.
-        </p>
+      {loading && account !== null ? (
+        <p className="dm-empty-note">Reading your positions from the chain…</p>
       ) : null}
 
-      {!sample && account !== null && ordered.length === 0 ? (
+      {!loading && account !== null && ordered.length === 0 ? (
         <p className="dm-empty-note">
           No open positions. Buy an outcome on a market, then choose a multiple above 1x to open
           one.
@@ -82,7 +79,6 @@ export function PositionsView({
             collateralAllowance={collateralAllowance}
             outcomeAllowance={outcomeAllowance}
             onSettled={onSettled}
-            sample={sample}
           />
         ))}
       </div>

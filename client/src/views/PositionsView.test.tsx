@@ -72,27 +72,30 @@ describe("actions need a real, owned position", () => {
     expect(screen.getByText(/connect a wallet to see your positions/i)).toBeVisible();
   });
 
-  it("labels sample positions and refuses to act on them", () => {
-    render(<PositionsView snapshot={SCENARIOS.healthy} account={ACCOUNT} sample />);
-    expect(screen.getByText(/do not exist on-chain/i)).toBeVisible();
-    expect(screen.getByRole("button", { name: "Repay" })).toBeDisabled();
-    expect(screen.getAllByText(/sample position/i).length).toBeGreaterThan(0);
-  });
-
-  it("tells a connected wallet with no positions what to do next", () => {
+  it("says it is reading rather than showing invented positions", () => {
     render(
       <PositionsView
         snapshot={{ ...SCENARIOS.healthy, positions: [] }}
         account={ACCOUNT}
-        sample={false}
+        loading
       />,
     );
+    expect(screen.getByText(/reading your positions from the chain/i)).toBeVisible();
+  });
+
+  it("never invents a position when the wallet has none", () => {
+    render(<PositionsView snapshot={{ ...SCENARIOS.healthy, positions: [] }} account={ACCOUNT} />);
+    expect(screen.queryByRole("button", { name: "Repay" })).toBeNull();
+  });
+
+  it("tells a connected wallet with no positions what to do next", () => {
+    render(<PositionsView snapshot={{ ...SCENARIOS.healthy, positions: [] }} account={ACCOUNT} />);
     expect(screen.getByText(/no open positions/i)).toBeVisible();
     expect(screen.getByText(/choose a multiple above 1x/i)).toBeVisible();
   });
 
   it("enables actions on a real position with a connected wallet", () => {
-    render(<PositionsView snapshot={SCENARIOS.healthy} account={ACCOUNT} sample={false} />);
+    render(<PositionsView snapshot={SCENARIOS.healthy} account={ACCOUNT} />);
     expect(screen.getByRole("button", { name: "Repay" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Add collateral" })).toBeEnabled();
     expect(screen.getByRole("button", { name: /repay and withdraw/i })).toBeEnabled();
