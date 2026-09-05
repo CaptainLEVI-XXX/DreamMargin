@@ -1,7 +1,8 @@
 import { erc20Abi, parseAbi, type Address } from "viem";
 import { erc6909Abi } from "@somnia-chain/markets-sdk";
 import { DEPLOYMENT } from "../config/deployment";
-import { quantizeDown, quantizeUp } from "../domain/amounts";
+import { formatUnits, quantizeDown, quantizeUp } from "../domain/amounts";
+import { oracleAbi } from "../web3/abis/oracleAbi";
 
 import type { Bounds } from "./bounds";
 import { buildCallPlan, type CallPlan } from "./callPlan";
@@ -21,6 +22,14 @@ export const binaryPoolAbi = parseAbi([
   "function mintSet(address yesTo, address noTo, uint256 amount)",
   "function placeBinaryOrder(uint8 kind, uint128 limitPrice, uint128 quantity, uint64 deadlineNs, uint8 orderType, uint8 selfMatch, address builder, uint16 builderFeeBps, bytes userData) returns (uint256)",
 ]);
+
+/** tUSDC and outcome shares both use six decimals on this deployment. */
+const DECIMALS = 6;
+
+/** Format an amount for a label. Integer division would silently truncate. */
+function amt(value: bigint): string {
+  return formatUnits(value, DECIMALS, 2);
+}
 
 const controller = DEPLOYMENT.controller as Address;
 const collateral = DEPLOYMENT.collateral as Address;
@@ -52,10 +61,27 @@ export type Intent = {
 /** Mint test collateral. Testnet only, and it needs no approval. */
 export function faucetIntent(amount: bigint): Intent {
   return {
-    label: `Mint ${amount / 1_000_000n} tUSDC`,
+    label: `Mint ${amt(amount)} tUSDC`,
     plan: buildCallPlan({ action: { to: collateral, label: `Mint tUSDC` } }),
     reviewed: {},
     action: { address: collateral, abi: testUsdcAbi, functionName: "faucet", args: [amount] },
+  };
+}
+
+/** Record a permissionless oracle sample when a quiet market has gone stale. */
+export function observeIntent(generationKey: `0x${string}`): Intent {
+  return {
+    label: "Refresh risk data",
+    plan: buildCallPlan({
+      action: { to: DEPLOYMENT.oracle as Address, label: "Refresh risk data" },
+    }),
+    reviewed: {},
+    action: {
+      address: DEPLOYMENT.oracle as Address,
+      abi: oracleAbi,
+      functionName: "observe",
+      args: [generationKey],
+    },
   };
 }
 
@@ -67,7 +93,7 @@ export function faucetIntent(amount: bigint): Intent {
  */
 export function mintSetIntent(pool: Address, amount: bigint, to: Address): Intent {
   return {
-    label: `Mint ${amount / 1_000_000n} complete sets`,
+    label: `Mint ${amt(amount)} complete sets`,
     plan: buildCallPlan({
       action: { to: pool, label: "Mint complete set" },
       erc20: {
@@ -75,7 +101,7 @@ export function mintSetIntent(pool: Address, amount: bigint, to: Address): Inten
         spender: pool,
         required: amount,
         current: 0n,
-        label: `Approve ${amount / 1_000_000n} tUSDC`,
+        label: `Approve ${amt(amount)} tUSDC`,
       },
     }),
     reviewed: { maxCollateralIn: amount },
@@ -124,7 +150,7 @@ export function buyOutcomeIntent(input: {
     input.oneCollateral;
 
   return {
-    label: `Buy ${quantity / input.oneCollateral} ${input.side.toUpperCase()}`,
+    label: `Buy ${amt(quantity)} ${input.side.toUpperCase()}`,
     plan: buildCallPlan({
       action: { to: input.pool, label: `Buy ${input.side.toUpperCase()}` },
       erc20: {
@@ -132,7 +158,7 @@ export function buyOutcomeIntent(input: {
         spender: input.pool,
         required: maxCollateralIn,
         current: input.collateralAllowance,
-        label: `Approve ${maxCollateralIn / input.oneCollateral} tUSDC`,
+        label: `Approve ${amt(maxCollateralIn)} tUSDC`,
       },
     }),
     reviewed: { side: "buy", maxCollateralIn, limitPrice: yesLimit },
@@ -164,7 +190,7 @@ export function buyOutcomeIntent(input: {
 /** Supply collateral to the vault. ERC-4626 deposit. */
 export function vaultDepositIntent(assets: bigint, receiver: Address, allowance: bigint): Intent {
   return {
-    label: `Supply ${assets / 1_000_000n} tUSDC`,
+    label: `Supply ${amt(assets)} tUSDC`,
     plan: buildCallPlan({
       action: { to: vault, label: "Supply to vault" },
       erc20: {
@@ -172,7 +198,7 @@ export function vaultDepositIntent(assets: bigint, receiver: Address, allowance:
         spender: vault,
         required: assets,
         current: allowance,
-        label: `Approve ${assets / 1_000_000n} tUSDC`,
+        label: `Approve ${amt(assets)} tUSDC`,
       },
     }),
     reviewed: { maxCollateralIn: assets },
@@ -195,7 +221,7 @@ export function vaultDepositIntent(assets: bigint, receiver: Address, allowance:
 /** Withdraw exact assets. `maxWithdraw` is authoritative and clamps the input. */
 export function vaultWithdrawIntent(assets: bigint, owner: Address): Intent {
   return {
-    label: `Withdraw ${assets / 1_000_000n} tUSDC`,
+    label: `Withdraw ${amt(assets)} tUSDC`,
     plan: buildCallPlan({ action: { to: vault, label: "Withdraw from vault" } }),
     reviewed: { minCollateralOut: assets },
     action: {
@@ -213,7 +239,7 @@ export function vaultWithdrawIntent(assets: bigint, owner: Address): Intent {
 /** Repay debt. Payable by any account; the UI always uses the connected wallet. */
 export function repayIntent(positionId: bigint, maxAssets: bigint, allowance: bigint): Intent {
   return {
-    label: `Repay ${maxAssets / 1_000_000n} tUSDC`,
+    label: `Repay ${amt(maxAssets)} tUSDC`,
     plan: buildCallPlan({
       action: { to: controller, label: "Repay debt" },
       erc20: {
@@ -221,7 +247,7 @@ export function repayIntent(positionId: bigint, maxAssets: bigint, allowance: bi
         spender: controller,
         required: maxAssets,
         current: allowance,
-        label: `Approve ${maxAssets / 1_000_000n} tUSDC`,
+        label: `Approve ${amt(maxAssets)} tUSDC`,
       },
     }),
     reviewed: { maxRepayAssets: maxAssets },
@@ -249,7 +275,7 @@ export function addCollateralIntent(
   allowance: bigint,
 ): Intent {
   return {
-    label: `Add ${shares / 1_000_000n} shares`,
+    label: `Add ${amt(shares)} shares`,
     plan: buildCallPlan({
       action: { to: controller, label: "Add collateral" },
       erc6909: {
@@ -258,7 +284,7 @@ export function addCollateralIntent(
         outcomeId,
         required: shares,
         current: allowance,
-        label: `Approve ${shares / 1_000_000n} shares only`,
+        label: `Approve ${amt(shares)} shares only`,
       },
     }),
     reviewed: {},
@@ -281,7 +307,7 @@ export function addCollateralIntent(
 /** Withdraw safe excess shares. Needs no approval; the controller custodies them. */
 export function withdrawCollateralIntent(positionId: bigint, shares: bigint): Intent {
   return {
-    label: `Withdraw ${shares / 1_000_000n} shares`,
+    label: `Withdraw ${amt(shares)} shares`,
     plan: buildCallPlan({ action: { to: controller, label: "Withdraw collateral" } }),
     reviewed: {},
     action: {
@@ -305,7 +331,7 @@ export function deleverageIntent(input: {
 }): Intent {
   const shares = quantizeDown(input.sharesToSell, input.lotSize);
   return {
-    label: `Sell ${shares / 1_000_000n} shares`,
+    label: `Sell ${amt(shares)} shares`,
     plan: buildCallPlan({ action: { to: controller, label: "Deleverage" } }),
     reviewed: {
       side: "sell",
@@ -351,7 +377,7 @@ export function closeToOutcomeIntent(
         spender: controller,
         required: maxRepayAssets,
         current: allowance,
-        label: `Approve ${maxRepayAssets / 1_000_000n} tUSDC`,
+        label: `Approve ${amt(maxRepayAssets)} tUSDC`,
       },
     }),
     reviewed: { maxRepayAssets },
@@ -399,7 +425,7 @@ export function closeToCollateralIntent(input: {
         spender: controller,
         required: input.maxRepayAssets,
         current: input.allowance,
-        label: `Approve ${input.maxRepayAssets / 1_000_000n} tUSDC`,
+        label: `Approve ${amt(input.maxRepayAssets)} tUSDC`,
       },
     }),
     reviewed: {

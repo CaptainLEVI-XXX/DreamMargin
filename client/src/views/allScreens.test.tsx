@@ -76,7 +76,7 @@ describe("safe actions survive degraded protocol modes", () => {
     },
   );
 
-  it.each(["paused", "reduceOnly", "staleOracle"] as ScenarioName[])(
+  it.each(["paused", "reduceOnly"] as ScenarioName[])(
     "disables leveraged buying with a stated reason under %s",
     (name) => {
       const s = SCENARIOS[name];
@@ -93,4 +93,19 @@ describe("safe actions survive degraded protocol modes", () => {
       expect(getByRole("button", { name: /buy .* at 1\.25x/i })).toBeDisabled();
     },
   );
+
+  it("offers a permissionless recovery action when risk data is stale", () => {
+    const s = SCENARIOS.staleOracle;
+    const { getByRole } = render(
+      <TradeView
+        market={s.markets[0]}
+        protocol={s.protocol}
+        vault={s.vault}
+        balances={EMPTY_BALANCES}
+        book={{ asks: [{ yesPrice: 983_000n, quantity: 100_000_000n }], bids: [] }}
+        account="0x1234567890abcdef1234567890abcdef12345678"
+      />,
+    );
+    expect(getByRole("button", { name: /refresh risk data/i })).toBeEnabled();
+  });
 });

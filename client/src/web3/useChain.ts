@@ -54,7 +54,7 @@ export function useWallet() {
   return { wallet: state, connect: doConnect, switchChain: doSwitch };
 }
 
-export function useChain(account: string | null): ChainStatus {
+export function useChain(account: string | null, refreshKey = 0): ChainStatus {
   const [status, setStatus] = useState<ChainStatus>({ kind: "loading" });
 
   useEffect(() => {
@@ -116,7 +116,7 @@ export function useChain(account: string | null): ChainStatus {
     return () => {
       cancelled = true;
     };
-  }, [account]);
+  }, [account, refreshKey]);
 
   return status;
 }

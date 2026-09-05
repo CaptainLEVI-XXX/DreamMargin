@@ -28,6 +28,22 @@ const TABLE: Record<string, { message: string; recovery: string }> = {
     message: "This market generation is not supported for leverage",
     recovery: "Buy without leverage or choose another market",
   },
+  UnsupportedSeriesIdentity: {
+    message: "This market was not created by an approved DreamMargin series",
+    recovery: "Choose a supported BTC or ETH market",
+  },
+  UnsupportedSeriesPolicy: {
+    message: "Leverage is disabled for this market series",
+    recovery: "Buy without leverage or choose another market",
+  },
+  SeriesPolicyFrozen: {
+    message: "New leverage for this market series is frozen",
+    recovery: "Repay, close, or buy without leverage",
+  },
+  SeriesIntervalTooShort: {
+    message: "This market expires too soon to support leverage safely",
+    recovery: "Choose a long-duration DreamMargin market",
+  },
   GenerationFrozen: {
     message: "New risk for this outcome is frozen",
     recovery: "Repay, close, or choose another market",

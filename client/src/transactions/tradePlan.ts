@@ -1,5 +1,5 @@
 import type { Address } from "viem";
-import { mulDivDown } from "../domain/amounts";
+import { formatUnits, mulDivDown } from "../domain/amounts";
 import type { AcquisitionPlan } from "../domain/bookQuote";
 import type { MarketView } from "../domain/models";
 import { buyOutcomeIntent, mintSetIntent, type Intent as ActionIntent } from "./actions";
@@ -51,8 +51,10 @@ export type TradeSequence = {
 export function planTrade(input: TradeInput): TradeSequence {
   const { market, acquisition } = input;
   const intents: ActionIntent[] = [];
+  const outcomeId = input.side === "yes" ? market.key.outcomeId : market.key.outcomeId + 1n;
 
-  const needed = input.quantity > input.owned ? input.quantity - input.owned : 0n;
+  const ownedUsed = input.owned < input.quantity ? input.owned : input.quantity;
+  const needed = input.quantity - ownedUsed;
   const acquired = acquisition.fromBook + acquisition.fromMint;
 
   if (needed > 0n && acquired === 0n) {
@@ -88,13 +90,15 @@ export function planTrade(input: TradeInput): TradeSequence {
     intents.push(mintSetIntent(market.key.pool as Address, acquisition.fromMint, input.account));
   }
 
-  const committed = input.owned + acquired;
-  const equity = mulDivDown(committed, market.riskMark, market.oneCollateral);
+  const committed = ownedUsed + acquired;
+  const riskMark = input.side === "yes" ? market.riskMark : market.oneCollateral - market.riskMark;
+  const marketPrice =
+    input.side === "yes" ? market.yesPrice : market.oneCollateral - market.yesPrice;
+  const equity = mulDivDown(committed, riskMark, market.oneCollateral);
   const borrowed = mulDivDown(equity, input.leverageBps - BPS, BPS);
 
   if (input.leverageBps > BPS) {
-    const minSharesOut =
-      (mulDivDown(borrowed, market.oneCollateral, market.yesPrice) * 9_900n) / BPS;
+    const minSharesOut = (mulDivDown(borrowed, market.oneCollateral, marketPrice) * 9_900n) / BPS;
 
     intents.push({
       label: `Open ${Number(input.leverageBps) / 10_000}x position`,
@@ -103,10 +107,10 @@ export function planTrade(input: TradeInput): TradeSequence {
         erc6909: {
           token: DEPLOYMENT.outcomeToken as Address,
           spender: DEPLOYMENT.controller as Address,
-          outcomeId: market.key.outcomeId,
+          outcomeId,
           required: committed,
           current: input.outcomeAllowance,
-          label: `Approve ${committed / market.oneCollateral} shares only`,
+          label: `Approve ${formatUnits(committed, market.collateralDecimals, 2)} shares only`,
         },
       }),
       reviewed: {
@@ -121,7 +125,7 @@ export function planTrade(input: TradeInput): TradeSequence {
         functionName: "openPosition",
         args: [
           {
-            key: market.key,
+            key: { ...market.key, outcomeId },
             outcomeIndex: input.side === "yes" ? 0 : 1,
             initialShares: committed,
             leverageBps: input.leverageBps,
@@ -138,7 +142,7 @@ export function planTrade(input: TradeInput): TradeSequence {
         address: DEPLOYMENT.outcomeToken as Address,
         abi: erc6909Abi as readonly unknown[],
         functionName: "approve",
-        args: [DEPLOYMENT.controller, market.key.outcomeId, committed],
+        args: [DEPLOYMENT.controller, outcomeId, committed],
       },
     });
   }

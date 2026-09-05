@@ -2,6 +2,11 @@
 
 Web client for the dreammargin protocol on the Somnia Shannon testnet.
 
+The application is bound to the dedicated long-lived BTC and ETH DreamDEX
+markets in `contracts/deployments/shannon-frontend.json`. It reads market books,
+oracle state, eligibility, balances, vault state, and paginated positions from
+public chain RPC calls. It does not require a DreamMargin backend or a log scan.
+
 ## Commands
 
 ```sh
@@ -12,10 +17,14 @@ npm run typecheck    # TypeScript only
 npm run lint         # ESLint
 npm run format       # Prettier, writes in place
 npm run test         # Vitest
+npm run generate     # refresh deployment bindings and contract ABIs
 ```
 
 Run the formatter, linter, type checker, tests, and production build before
 requesting review.
+
+Run `npm run generate` whenever the contracts are redeployed or their public ABI
+changes. Do not hand-edit generated files under `src/config` or `src/web3/abis`.
 
 ## Conventions
 

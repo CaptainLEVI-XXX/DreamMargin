@@ -1,5 +1,5 @@
 import type { PublicClient } from "viem";
-import { DEPLOYMENT } from "../config/deployment";
+import { DEPLOYMENT, MARKETS, type MarketDeployment } from "../config/deployment";
 import type { MarketKey } from "../domain/models";
 import { generationKey } from "../domain/marketKey";
 import { readGeneration, type GenerationSnapshot } from "./reads";
@@ -7,12 +7,11 @@ import { readGeneration, type GenerationSnapshot } from "./reads";
 /**
  * Market discovery.
  *
- * Design D-4/FS-5: the DreamDEX indexer is the sole discovery source — the
- * client keeps no second discovery path. But integration guide §6.1 and §16
- * still require every candidate to be verified on-chain before leverage is
- * enabled, because DreamDEX recycles pools onto new generations and an indexer
- * can lag. That verification is a pre-signature safety gate, not a fallback
- * source, and it runs here.
+ * DreamMargin intentionally supports only its two long-lived demo markets.
+ * Their identities come from the committed deployment manifest, then every
+ * generation is verified on-chain before leverage is enabled. The client does
+ * not need a private discovery service and cannot accidentally surface an
+ * unrelated short-duration DreamDEX market.
  */
 
 const MARKET_QUERY = `
@@ -67,6 +66,36 @@ export type MarketCandidate = {
   collateralDecimals: number;
   oneCollateral: bigint;
 };
+
+/** Convert one committed deployment entry into a market candidate. */
+export function deployedCandidate(market: MarketDeployment): MarketCandidate {
+  const base = {
+    marketId: market.marketId,
+    pool: market.pool,
+    marketNonce: market.marketNonce,
+    outcomeToken: DEPLOYMENT.outcomeToken,
+    collateral: DEPLOYMENT.collateral,
+  };
+  const oneCollateral = 10n ** BigInt(DEPLOYMENT.collateralDecimals);
+
+  return {
+    yesKey: { ...base, outcomeId: market.yesId },
+    noKey: { ...base, outcomeId: market.noId },
+    question: market.question,
+    asset: market.symbol,
+    expiry: market.expiry,
+    tradingStart: market.tradingStart,
+    trading: market.expiry > BigInt(Math.floor(Date.now() / 1000)),
+    lastYesPrice: null,
+    collateralDecimals: DEPLOYMENT.collateralDecimals,
+    oneCollateral,
+  };
+}
+
+/** The complete client market universe; no indexer discovery is required. */
+export function deployedCandidates(): MarketCandidate[] {
+  return MARKETS.map(deployedCandidate);
+}
 
 /**
  * Convert an indexer row into candidate market keys.

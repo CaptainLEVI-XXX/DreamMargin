@@ -5,10 +5,12 @@ import { SCENARIOS } from "../fixtures/scenarios";
 import { ProtocolMode } from "../domain/protocol";
 
 describe("ProtocolAlert", () => {
-  it("shows the testnet notice when nothing else applies", () => {
+  it("says nothing when there is nothing wrong", () => {
+    // The network is already named in the wallet control, so a permanent
+    // banner would be chrome rather than information.
     const s = SCENARIOS.healthy;
-    render(<ProtocolAlert protocol={s.protocol} positions={s.positions} />);
-    expect(screen.getByRole("status")).toHaveTextContent(/testnet/i);
+    const { container } = render(<ProtocolAlert protocol={s.protocol} positions={[]} />);
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("shows exactly one alert at a time", () => {

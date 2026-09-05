@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEPLOYMENT } from "./deployment";
+import { DEPLOYMENT, MARKETS } from "./deployment";
 
 describe("DEPLOYMENT", () => {
   it("targets Somnia Shannon", () => {
@@ -7,17 +7,21 @@ describe("DEPLOYMENT", () => {
   });
 
   it("carries the verified controller address", () => {
-    expect(DEPLOYMENT.controller).toBe("0x50B054bD4A891C44A66c86e8c82A45AE0630869c");
+    expect(DEPLOYMENT.controller).toBe("0xc141ba0c4f7bFAa72628f6Ea28F6e0118F154fe3");
   });
 
   it("carries the verified vault and oracle", () => {
-    expect(DEPLOYMENT.vault).toBe("0xE4B62C03b4a618f5713C6f0b06F6bB763e7685a6");
-    expect(DEPLOYMENT.oracle).toBe("0x278aDFBF3D6906fb17616cFA35a3c11A3dDA93d1");
+    expect(DEPLOYMENT.vault).toBe("0x97cE780455c04398c6b4b079Dbb3F434619F8027");
+    expect(DEPLOYMENT.oracle).toBe("0x979ADc628D88fb0499F0108C0968433B48b9259C");
   });
 
-  it("keeps the deploy block as bigint for log scanning", () => {
-    expect(DEPLOYMENT.deployedAtBlock).toBe(478284318n);
+  it("keeps deployment numbers and market identities exact", () => {
+    expect(DEPLOYMENT.deployedAtBlock).toBe(479866354n);
     expect(typeof DEPLOYMENT.deployedAtBlock).toBe("bigint");
+    expect(MARKETS.map((market) => market.symbol)).toEqual(["BTC", "ETH"]);
+    expect(MARKETS.every((market) => market.expiry - market.tradingStart > 30n * 86_400n)).toBe(
+      true,
+    );
   });
 
   it("uses checksummed addresses", () => {

@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@somnia-chain/markets-sdk": "^0.28.1",
+    "lightweight-charts": "^5.2.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "viem": "^2.56.3"

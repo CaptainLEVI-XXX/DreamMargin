@@ -12,20 +12,53 @@
   padding: calc(var(--dm-space) * 2) var(--dm-mobile-pad);
 }
 
+/* Balance sits beside the faucet so topping up is one reach, not a hunt. */
+.dm-wallet-balance {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--dm-ink);
+  font-size: var(--dm-size-13);
+}
+
+.dm-wallet-balance small {
+  color: var(--dm-text);
+  font-size: var(--dm-size-11);
+}
+
+.dm-faucet {
+  border: 1px solid var(--dm-line);
+  background: transparent;
+  color: var(--dm-text);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  padding: 3px 8px;
+  border-radius: var(--dm-radius);
+  cursor: pointer;
+}
+
+.dm-faucet:hover {
+  color: var(--dm-ink);
+  border-color: var(--dm-accent);
+}
+
 .dm-lockup {
   display: inline-flex;
   align-items: center;
   gap: var(--dm-space);
 }
 
-/* The mark is white on the dark ground — never violet. §18.4 */
+/* §18.4 permits either tile. This is the light tile: white ground, near-black
+   mark. Never a violet mark. */
 .dm-mark {
   font-family: var(--dm-font-brand);
   font-weight: 800;
+  font-size: var(--dm-size-13);
   letter-spacing: -0.03em;
-  color: var(--dm-ink);
-  border: 1px solid var(--dm-line);
-  padding: 2px 6px;
+  color: var(--dm-ground);
+  background: var(--dm-ink);
+  padding: 3px 6px;
+  line-height: 1;
 }
 
 .dm-wordmark {

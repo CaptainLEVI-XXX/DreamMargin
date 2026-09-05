@@ -3,7 +3,7 @@ import { AppShell, type Route } from "./components/AppShell";
 import { ProtocolAlert } from "./components/ProtocolAlert";
 import { WalletButton } from "./components/WalletButton";
 import type { MarketView } from "./domain/models";
-import { SCENARIOS, type ScenarioName } from "./fixtures/scenarios";
+import { SCENARIOS } from "./fixtures/scenarios";
 import { faucetIntent } from "./transactions/actions";
 import { useIntentRunner } from "./transactions/useIntentRunner";
 import { EarnView } from "./views/EarnView";
@@ -12,48 +12,60 @@ import { PositionsView } from "./views/PositionsView";
 import { TradeView } from "./views/TradeView";
 import { useBalances } from "./web3/useBalances";
 import { useChain, useWallet } from "./web3/useChain";
+import { useMarkets } from "./web3/useMarkets";
+import { useIndexSeries } from "./data/useIndexSeries";
 import { usePositions } from "./web3/usePositions";
-
-const SCENARIO_NAMES: ScenarioName[] = [
-  "healthy",
-  "atRisk",
-  "resolved",
-  "staleOracle",
-  "reduceOnly",
-  "paused",
-];
-
-/** Fixture switching is a development affordance, not part of the product. */
-const SHOW_SCENARIOS = import.meta.env.DEV;
 
 export default function App() {
   const [route, setRoute] = useState<Route>("markets");
-  const [scenario, setScenario] = useState<ScenarioName>("healthy");
   const [market, setMarket] = useState<MarketView | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const { wallet, connect, switchChain } = useWallet();
   const account = wallet.status === "connected" ? wallet.account : null;
-  const chain = useChain(account);
+  const discovered = useMarkets(account, refreshKey);
+  const chain = useChain(account, refreshKey);
 
-  const fixture = SCENARIOS[scenario];
-  const primary = fixture.markets[0];
+  const fixture = SCENARIOS.healthy;
+  const liveMarkets = discovered.kind === "ready" ? discovered.markets : [];
+
+  // Every live market is BTC or ETH, so two underlying series cover every row's
+  // sparkline rather than one request per market.
+  const btc = useIndexSeries("BTC", 0n, "M1", 20);
+  const eth = useIndexSeries("ETH", 0n, "M1", 20);
+  const sparks = {
+    BTC: btc.kind === "ready" ? btc.series.points : [],
+    ETH: eth.kind === "ready" ? eth.series.points : [],
+  };
+  const primary = liveMarkets[0] ?? fixture.markets[0];
+  const selectedMarket =
+    market === null
+      ? null
+      : (liveMarkets.find(
+          (candidate) => candidate.key.marketId.toLowerCase() === market.key.marketId.toLowerCase(),
+        ) ?? market);
+  const selected = selectedMarket ?? primary;
   const { balances, refresh } = useBalances(
     account,
-    primary.key.outcomeId,
-    primary.key.outcomeId + 1n,
+    selected.key.outcomeId,
+    selected.key.outcomeId + 1n,
   );
   const faucet = useIntentRunner(account, { atomicBatch: false }, refresh);
-  const { state: positionsState, refresh: refreshPositions } = usePositions(account, primary);
+  const { state: positionsState, refresh: refreshPositions } = usePositions(account, liveMarkets);
 
   const refreshAll = () => {
     refresh();
     refreshPositions();
+    setRefreshKey((current) => current + 1);
   };
 
   // Positions are only ever what the chain reports for this wallet. There is no
   // sample fallback: a card that cannot be acted on is worse than no card.
-  const livePositions = positionsState.kind === "ready" ? positionsState.positions : [];
-  const positionsLoading = account !== null && positionsState.kind !== "ready";
+  const livePositions =
+    account !== null && positionsState.kind === "ready" ? positionsState.positions : [];
+  const positionsLoading =
+    account !== null && (positionsState.kind === "idle" || positionsState.kind === "loading");
+  const positionsError = positionsState.kind === "error" ? positionsState.message : undefined;
 
   const snapshot =
     chain.kind === "ready"
@@ -67,9 +79,6 @@ export default function App() {
           vault: chain.vault,
         }
       : fixture;
-
-  const withBalances = (m: MarketView): MarketView =>
-    account === null ? m : { ...m, ownedYes: balances.yes, ownedNo: balances.no };
 
   return (
     <AppShell
@@ -88,19 +97,6 @@ export default function App() {
         />
       }
     >
-      {SHOW_SCENARIOS ? (
-        <label className="dm-scenario">
-          Fixture state
-          <select value={scenario} onChange={(e) => setScenario(e.target.value as ScenarioName)}>
-            {SCENARIO_NAMES.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
-
       {chain.kind === "error" ? (
         <div className="dm-alert" role="status">
           <span>{chain.message}</span>
@@ -110,20 +106,35 @@ export default function App() {
       )}
 
       {route === "markets" &&
-        (market === null ? (
+        (selectedMarket === null ? (
           <MarketsView
-            snapshot={{ ...snapshot, markets: snapshot.markets.map(withBalances) }}
+            snapshot={{ ...snapshot, markets: liveMarkets }}
             onOpenBuilder={setMarket}
+            loading={discovered.kind === "loading"}
+            error={discovered.kind === "error" ? discovered.message : undefined}
+            sparks={sparks}
           />
         ) : (
           <TradeView
-            market={withBalances(market)}
+            market={{ ...selectedMarket, ownedYes: balances.yes, ownedNo: balances.no }}
             protocol={snapshot.protocol}
             vault={snapshot.vault}
             balances={balances}
-            book={{ asks: [], bids: [] }}
+            book={{
+              asks:
+                selectedMarket.book?.yesAsks.map((level) => ({
+                  yesPrice: level.price,
+                  quantity: level.quantity,
+                })) ?? [],
+              bids:
+                selectedMarket.book?.yesBids.map((level) => ({
+                  yesPrice: level.price,
+                  quantity: level.quantity,
+                })) ?? [],
+            }}
             account={account}
             onSettled={refreshAll}
+            onBack={() => setMarket(null)}
             onSupplyVault={() => {
               setMarket(null);
               setRoute("earn");
@@ -136,9 +147,9 @@ export default function App() {
           snapshot={{ ...snapshot, positions: livePositions }}
           account={account}
           collateralAllowance={balances.collateralAllowance}
-          outcomeAllowance={balances.yesAllowance}
           onSettled={refreshAll}
           loading={positionsLoading}
+          error={positionsError}
         />
       )}
       {route === "earn" && <EarnView vault={snapshot.vault} />}

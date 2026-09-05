@@ -4,6 +4,67 @@
 export const controllerAbi = [
   {
     type: "function",
+    name: "activateSeriesGeneration",
+    inputs: [
+      {
+        name: "key",
+        type: "tuple",
+        internalType: "struct MarketKey",
+        components: [
+          {
+            name: "marketId",
+            type: "bytes32",
+            internalType: "bytes32",
+          },
+          {
+            name: "pool",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "marketNonce",
+            type: "uint64",
+            internalType: "uint64",
+          },
+          {
+            name: "outcomeToken",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "outcomeId",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "collateral",
+            type: "address",
+            internalType: "address",
+          },
+        ],
+      },
+      {
+        name: "outcomeIndex",
+        type: "uint8",
+        internalType: "uint8",
+      },
+    ],
+    outputs: [
+      {
+        name: "generationKey",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "policyId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "addCollateral",
     inputs: [
       {
@@ -520,6 +581,200 @@ export const controllerAbi = [
   },
   {
     type: "function",
+    name: "executeSeriesPolicyChange",
+    inputs: [
+      {
+        name: "changeId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "policyId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "policy",
+        type: "tuple",
+        internalType: "struct SeriesPolicy",
+        components: [
+          {
+            name: "creator",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "originVenueId",
+            type: "bytes32",
+            internalType: "bytes32",
+          },
+          {
+            name: "originOperatorId",
+            type: "uint32",
+            internalType: "uint32",
+          },
+          {
+            name: "collateral",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "minIntervalSec",
+            type: "uint64",
+            internalType: "uint64",
+          },
+          {
+            name: "risk",
+            type: "tuple",
+            internalType: "struct RiskConfig",
+            components: [
+              {
+                name: "maxDebtPerPosition",
+                type: "uint256",
+                internalType: "uint256",
+              },
+              {
+                name: "maxDebtPerOutcome",
+                type: "uint256",
+                internalType: "uint256",
+              },
+              {
+                name: "maxDebtPerMarket",
+                type: "uint256",
+                internalType: "uint256",
+              },
+              {
+                name: "minDebt",
+                type: "uint256",
+                internalType: "uint256",
+              },
+              {
+                name: "initialLtvBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maintenanceLtvBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "collateralFactorBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "liquidationBonusBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maxSpreadBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maxSlippageBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maxPositionDepthBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maxLeverageBps",
+                type: "uint32",
+                internalType: "uint32",
+              },
+              {
+                name: "openingCutoff",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "reduceOnlyCutoff",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "compressionWindow",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "maxBookLevels",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "collateralDecimals",
+                type: "uint8",
+                internalType: "uint8",
+              },
+              {
+                name: "outcomeIndex",
+                type: "uint8",
+                internalType: "uint8",
+              },
+            ],
+          },
+          {
+            name: "oracle",
+            type: "tuple",
+            internalType: "struct SeriesOracleConfig",
+            components: [
+              {
+                name: "minAge",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "updateInterval",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "staleAfter",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "depthQuantity",
+                type: "uint128",
+                internalType: "uint128",
+              },
+              {
+                name: "maxObservations",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maxBookLevels",
+                type: "uint16",
+                internalType: "uint16",
+              },
+            ],
+          },
+          {
+            name: "enabled",
+            type: "bool",
+            internalType: "bool",
+          },
+          {
+            name: "frozen",
+            type: "bool",
+            internalType: "bool",
+          },
+        ],
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "feeRecipient",
     inputs: [],
     outputs: [
@@ -537,6 +792,19 @@ export const controllerAbi = [
     inputs: [
       {
         name: "generationKey",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "freezeSeriesPolicy",
+    inputs: [
+      {
+        name: "policyId",
         type: "bytes32",
         internalType: "bytes32",
       },
@@ -821,6 +1089,196 @@ export const controllerAbi = [
   },
   {
     type: "function",
+    name: "getSeriesPolicy",
+    inputs: [
+      {
+        name: "policyId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [
+      {
+        name: "policy",
+        type: "tuple",
+        internalType: "struct SeriesPolicy",
+        components: [
+          {
+            name: "creator",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "originVenueId",
+            type: "bytes32",
+            internalType: "bytes32",
+          },
+          {
+            name: "originOperatorId",
+            type: "uint32",
+            internalType: "uint32",
+          },
+          {
+            name: "collateral",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "minIntervalSec",
+            type: "uint64",
+            internalType: "uint64",
+          },
+          {
+            name: "risk",
+            type: "tuple",
+            internalType: "struct RiskConfig",
+            components: [
+              {
+                name: "maxDebtPerPosition",
+                type: "uint256",
+                internalType: "uint256",
+              },
+              {
+                name: "maxDebtPerOutcome",
+                type: "uint256",
+                internalType: "uint256",
+              },
+              {
+                name: "maxDebtPerMarket",
+                type: "uint256",
+                internalType: "uint256",
+              },
+              {
+                name: "minDebt",
+                type: "uint256",
+                internalType: "uint256",
+              },
+              {
+                name: "initialLtvBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maintenanceLtvBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "collateralFactorBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "liquidationBonusBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maxSpreadBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maxSlippageBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maxPositionDepthBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maxLeverageBps",
+                type: "uint32",
+                internalType: "uint32",
+              },
+              {
+                name: "openingCutoff",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "reduceOnlyCutoff",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "compressionWindow",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "maxBookLevels",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "collateralDecimals",
+                type: "uint8",
+                internalType: "uint8",
+              },
+              {
+                name: "outcomeIndex",
+                type: "uint8",
+                internalType: "uint8",
+              },
+            ],
+          },
+          {
+            name: "oracle",
+            type: "tuple",
+            internalType: "struct SeriesOracleConfig",
+            components: [
+              {
+                name: "minAge",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "updateInterval",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "staleAfter",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "depthQuantity",
+                type: "uint128",
+                internalType: "uint128",
+              },
+              {
+                name: "maxObservations",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maxBookLevels",
+                type: "uint16",
+                internalType: "uint16",
+              },
+            ],
+          },
+          {
+            name: "enabled",
+            type: "bool",
+            internalType: "bool",
+          },
+          {
+            name: "frozen",
+            type: "bool",
+            internalType: "bool",
+          },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "globalRiskConfig",
     inputs: [],
     outputs: [
@@ -1094,6 +1552,49 @@ export const controllerAbi = [
   },
   {
     type: "function",
+    name: "policyFor",
+    inputs: [
+      {
+        name: "marketId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [
+      {
+        name: "policyId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "eligible",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "policyForGeneration",
+    inputs: [
+      {
+        name: "generationKey",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [
+      {
+        name: "policyId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "positionCloseFacet",
     inputs: [],
     outputs: [
@@ -1140,6 +1641,40 @@ export const controllerAbi = [
         name: "facet",
         type: "address",
         internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "positionsOf",
+    inputs: [
+      {
+        name: "owner",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "offset",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "limit",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [
+      {
+        name: "ids",
+        type: "uint256[]",
+        internalType: "uint256[]",
+      },
+      {
+        name: "total",
+        type: "uint256",
+        internalType: "uint256",
       },
     ],
     stateMutability: "view",
@@ -1475,6 +2010,200 @@ export const controllerAbi = [
           },
           {
             name: "enabled",
+            type: "bool",
+            internalType: "bool",
+          },
+        ],
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "scheduleSeriesPolicyChange",
+    inputs: [
+      {
+        name: "changeId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "policyId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "policy",
+        type: "tuple",
+        internalType: "struct SeriesPolicy",
+        components: [
+          {
+            name: "creator",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "originVenueId",
+            type: "bytes32",
+            internalType: "bytes32",
+          },
+          {
+            name: "originOperatorId",
+            type: "uint32",
+            internalType: "uint32",
+          },
+          {
+            name: "collateral",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "minIntervalSec",
+            type: "uint64",
+            internalType: "uint64",
+          },
+          {
+            name: "risk",
+            type: "tuple",
+            internalType: "struct RiskConfig",
+            components: [
+              {
+                name: "maxDebtPerPosition",
+                type: "uint256",
+                internalType: "uint256",
+              },
+              {
+                name: "maxDebtPerOutcome",
+                type: "uint256",
+                internalType: "uint256",
+              },
+              {
+                name: "maxDebtPerMarket",
+                type: "uint256",
+                internalType: "uint256",
+              },
+              {
+                name: "minDebt",
+                type: "uint256",
+                internalType: "uint256",
+              },
+              {
+                name: "initialLtvBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maintenanceLtvBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "collateralFactorBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "liquidationBonusBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maxSpreadBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maxSlippageBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maxPositionDepthBps",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maxLeverageBps",
+                type: "uint32",
+                internalType: "uint32",
+              },
+              {
+                name: "openingCutoff",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "reduceOnlyCutoff",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "compressionWindow",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "maxBookLevels",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "collateralDecimals",
+                type: "uint8",
+                internalType: "uint8",
+              },
+              {
+                name: "outcomeIndex",
+                type: "uint8",
+                internalType: "uint8",
+              },
+            ],
+          },
+          {
+            name: "oracle",
+            type: "tuple",
+            internalType: "struct SeriesOracleConfig",
+            components: [
+              {
+                name: "minAge",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "updateInterval",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "staleAfter",
+                type: "uint40",
+                internalType: "uint40",
+              },
+              {
+                name: "depthQuantity",
+                type: "uint128",
+                internalType: "uint128",
+              },
+              {
+                name: "maxObservations",
+                type: "uint16",
+                internalType: "uint16",
+              },
+              {
+                name: "maxBookLevels",
+                type: "uint16",
+                internalType: "uint16",
+              },
+            ],
+          },
+          {
+            name: "enabled",
+            type: "bool",
+            internalType: "bool",
+          },
+          {
+            name: "frozen",
             type: "bool",
             internalType: "bool",
           },
@@ -2033,6 +2762,87 @@ export const controllerAbi = [
         type: "uint256",
         indexed: false,
         internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SeriesGenerationActivated",
+    inputs: [
+      {
+        name: "generationKey",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "policyId",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "marketGroup",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "outcomeIndex",
+        type: "uint8",
+        indexed: false,
+        internalType: "uint8",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SeriesPolicyFrozen",
+    inputs: [
+      {
+        name: "policyId",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "caller",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SeriesPolicyUpdated",
+    inputs: [
+      {
+        name: "policyId",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "identity",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "enabled",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+      {
+        name: "frozen",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
       },
     ],
     anonymous: false,

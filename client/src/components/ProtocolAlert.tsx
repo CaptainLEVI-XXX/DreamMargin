@@ -10,7 +10,7 @@ type Alert = { text: string; action: string };
  * Exactly one protocol-level alert, in frontend-spec §6.3's priority order.
  * Every alert names the corrective action rather than merely describing a fault.
  */
-function selectAlert(protocol: ProtocolView, positions: readonly PositionView[]): Alert {
+function selectAlert(protocol: ProtocolView, positions: readonly PositionView[]): Alert | null {
   if (protocol.wrongChain) {
     return { text: "dreammargin testnet uses Somnia Shannon", action: "Switch network" };
   }
@@ -35,11 +35,14 @@ function selectAlert(protocol: ProtocolView, positions: readonly PositionView[])
       action: "Retry",
     };
   }
-  return { text: "Somnia Shannon testnet. Values are not real money.", action: "Learn more" };
+  // Nothing wrong: the network is already named in the wallet control, so an
+  // always-on banner would be chrome rather than information.
+  return null;
 }
 
 export function ProtocolAlert({ protocol, positions }: Props) {
   const alert = selectAlert(protocol, positions);
+  if (alert === null) return null;
 
   return (
     <div className="dm-alert" role="status">

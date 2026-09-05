@@ -1,4 +1,3 @@
-import { Button } from "./Button";
 import { Value } from "./Value";
 import { formatUnits } from "../domain/amounts";
 import { shortenAddress, type WalletState } from "../web3/wallet";
@@ -28,9 +27,9 @@ export function WalletButton({ state, onConnect, onSwitchChain, collateral, onFa
   if (state.status === "disconnected") {
     return (
       <span className="dm-wallet">
-        <Button variant="secondary" onClick={onConnect}>
+        <button type="button" className="dm-faucet" onClick={onConnect}>
           Connect wallet
-        </Button>
+        </button>
       </span>
     );
   }
@@ -38,9 +37,9 @@ export function WalletButton({ state, onConnect, onSwitchChain, collateral, onFa
   if (state.wrongChain) {
     return (
       <span className="dm-wallet">
-        <Button variant="secondary" onClick={onSwitchChain}>
+        <button type="button" className="dm-faucet" onClick={onSwitchChain}>
           Switch network
-        </Button>
+        </button>
       </span>
     );
   }
@@ -48,14 +47,15 @@ export function WalletButton({ state, onConnect, onSwitchChain, collateral, onFa
   return (
     <span className="dm-wallet">
       {collateral === undefined ? null : (
-        <span className="dm-wallet-network">
-          <Value>{formatUnits(collateral, 6)}</Value> tUSDC
+        <span className="dm-wallet-balance">
+          <Value>{formatUnits(collateral, 6, 2)}</Value>
+          <small>tUSDC</small>
         </span>
       )}
       {onFaucet === undefined ? null : (
-        <Button variant="tertiary" onClick={onFaucet}>
+        <button type="button" className="dm-faucet" onClick={onFaucet}>
           Get tUSDC
-        </Button>
+        </button>
       )}
       <span className="dm-wallet-account" title={state.account}>
         <span className="dm-wallet-dot" aria-hidden="true" />

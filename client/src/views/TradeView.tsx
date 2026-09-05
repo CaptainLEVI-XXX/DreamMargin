@@ -7,17 +7,26 @@ import { SafetyBuffer } from "../components/SafetyBuffer";
 import { TransactionProgress } from "../components/TransactionProgress";
 import { Value } from "../components/Value";
 import { useIndexSeries } from "../data/useIndexSeries";
+import type { Resolution } from "../data/priceFeed";
 import { formatCents, formatUnits, parseUnitsStrict } from "../domain/amounts";
 import { planAcquisition, type BookLevel } from "../domain/bookQuote";
 import { defaultTier, formatMultiple, tiersFor } from "../domain/leverageTiers";
+import { generationKey } from "../domain/marketKey";
 import type { MarketView, ProtocolView, VaultView } from "../domain/models";
 import { availabilityFor, PositionStatus } from "../domain/protocol";
+import { observeIntent } from "../transactions/actions";
 import type { WalletCapabilities } from "../transactions/callPlan";
 import { planTrade } from "../transactions/tradePlan";
 import { useIntentRunner } from "../transactions/useIntentRunner";
 import type { Balances } from "../web3/tokens";
 
 const BPS = 10_000n;
+type ChartRange = "4h" | "10d" | "all";
+const CHART_RANGES: Record<ChartRange, { label: string; resolution: Resolution; limit: number }> = {
+  "4h": { label: "4H", resolution: "M1", limit: 240 },
+  "10d": { label: "10D", resolution: "H1", limit: 240 },
+  all: { label: "All", resolution: "D1", limit: 90 },
+};
 
 type Props = {
   market: MarketView;
@@ -28,6 +37,7 @@ type Props = {
   account?: `0x${string}` | null;
   capabilities?: WalletCapabilities;
   onSettled?: () => void;
+  onBack?: () => void;
   onSupplyVault?: () => void;
 };
 
@@ -50,6 +60,7 @@ export function TradeView({
   account = null,
   capabilities = { atomicBatch: false },
   onSettled,
+  onBack,
   onSupplyVault,
 }: Props) {
   const d = market.collateralDecimals;
@@ -57,7 +68,9 @@ export function TradeView({
   const [side, setSide] = useState<"yes" | "no">("yes");
   const [leverageBps, setLeverageBps] = useState<bigint>(defaultTier(tiers));
   const [amountText, setAmountText] = useState("5");
-  const index = useIndexSeries(market.asset, market.tradingStart);
+  const [chartRange, setChartRange] = useState<ChartRange>("10d");
+  const chart = CHART_RANGES[chartRange];
+  const index = useIndexSeries(market.asset, market.tradingStart, chart.resolution, chart.limit);
   const { intent, run, reset } = useIntentRunner(account, capabilities, onSettled);
 
   let amount: bigint | null = null;
@@ -119,7 +132,9 @@ export function TradeView({
   // Borrowing draws on vault cash; without it the open reverts however many
   // shares are held, so it is surfaced here rather than at signing time.
   const vaultShort = leveraged && borrowed > vault.availableLiquidity;
-  const price = side === "yes" ? market.yesPrice : market.oneCollateral - market.yesPrice;
+  const totalCost = acquisition.bookCost + acquisition.mintCost;
+  const acquired = acquisition.fromBook + acquisition.fromMint;
+  const effectivePrice = acquired === 0n ? null : (totalCost * market.oneCollateral) / acquired;
 
   const blockedReason = !leveraged
     ? undefined
@@ -133,7 +148,26 @@ export function TradeView({
   return (
     <div className="dm-trade">
       <div className="dm-trade-context">
+        {onBack === undefined ? null : (
+          <button type="button" className="dm-back" onClick={onBack}>
+            ← Markets
+          </button>
+        )}
         <h1>{market.question}</h1>
+        <div className="dm-chart-range" role="group" aria-label="Chart range">
+          {(Object.entries(CHART_RANGES) as [ChartRange, (typeof CHART_RANGES)[ChartRange]][]).map(
+            ([range, option]) => (
+              <button
+                key={range}
+                type="button"
+                data-selected={chartRange === range ? "" : undefined}
+                onClick={() => setChartRange(range)}
+              >
+                {option.label}
+              </button>
+            ),
+          )}
+        </div>
         {index.kind === "ready" ? (
           <MarketChart series={index.series} strike={index.strike} asset={market.asset} />
         ) : (
@@ -147,16 +181,29 @@ export function TradeView({
         <dl className="dm-market-facts">
           <dt>Market price</dt>
           <dd>
-            <Value>{formatCents(market.yesPrice, market.oneCollateral)}</Value> YES
+            {market.priceKnown === false ? (
+              <span className="dm-unknown">No trades yet</span>
+            ) : (
+              <>
+                <Value>{formatCents(market.yesPrice, market.oneCollateral)}</Value> YES
+              </>
+            )}
           </dd>
           <dt>Risk mark</dt>
           <dd>
-            <Value>{formatCents(market.riskMark, market.oneCollateral)}</Value>
+            {/* §4.5 keeps market price and risk mark distinct. A stale oracle
+                has no mark at all, so echoing the market price here would
+                invent the very distinction the rule exists to preserve. */}
+            {market.oracleStale ? (
+              <span className="dm-unknown">Unavailable while risk data is stale</span>
+            ) : (
+              <Value>{formatCents(market.riskMark, market.oneCollateral)}</Value>
+            )}
           </dd>
           <dt>You hold</dt>
           <dd>
-            <Value>{formatUnits(balances.yes, d)}</Value> YES ·{" "}
-            <Value>{formatUnits(balances.no, d)}</Value> NO
+            <Value>{formatUnits(balances.yes, d, 2)}</Value> YES ·{" "}
+            <Value>{formatUnits(balances.no, d, 2)}</Value> NO
           </dd>
         </dl>
       </div>
@@ -222,9 +269,16 @@ export function TradeView({
               </dd>
             </>
           ) : null}
-          <dt>Price</dt>
+          <dt>Price paid</dt>
           <dd>
-            <Value>{formatCents(price, market.oneCollateral)}</Value>
+            {/* The effective price, which differs from the market price
+                whenever any part is minted: a complete set always costs one
+                whole unit however the book is priced. */}
+            {effectivePrice === null ? (
+              <span className="dm-unknown">—</span>
+            ) : (
+              <Value>{formatCents(effectivePrice, market.oneCollateral)}</Value>
+            )}
           </dd>
         </dl>
 
@@ -260,7 +314,16 @@ export function TradeView({
               : `${sequence.confirmations} wallet confirmations`}
         </p>
 
-        {intent === null ? (
+        {intent === null && leveraged && market.oracleStale ? (
+          <Button
+            variant="primary"
+            disabled={account === null}
+            disabledReason={account === null ? "Connect a wallet to continue" : undefined}
+            onClick={() => run(observeIntent(generationKey(market.key)))}
+          >
+            Refresh risk data
+          </Button>
+        ) : intent === null ? (
           <Button
             variant="primary"
             disabled={!canAct || (leveraged && blockedReason !== undefined)}
@@ -274,10 +337,9 @@ export function TradeView({
               if (fresh === null) return;
               // Sequential by necessity: a DreamDEX fill must confirm before
               // DreamMargin can pull the shares.
-              void fresh.intents.reduce<Promise<void>>(
-                (chain, next) => chain.then(() => run(next)),
-                Promise.resolve(),
-              );
+              void (async () => {
+                for (const next of fresh.intents) await run(next);
+              })();
             }}
           >
             {leveraged

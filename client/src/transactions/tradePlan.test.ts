@@ -93,9 +93,9 @@ describe("shares already held", () => {
     expect(seq.intents.map((i) => i.label)).toEqual(["Open 1.5x position"]);
   });
 
-  it("commits everything held rather than only the requested size", () => {
+  it("commits only the requested size when the wallet holds more", () => {
     const seq = trade({ quantity: 2n * ONE, owned: 5n * ONE, leverageBps: 15_000n });
-    expect(seq.committed).toBe(5n * ONE);
+    expect(seq.committed).toBe(2n * ONE);
   });
 
   it("buys only the shortfall", () => {
@@ -152,7 +152,11 @@ describe("side selection", () => {
       tickSize: LOT,
     });
     const open = seq.intents.at(-1);
-    const params = open?.action.args[0] as { outcomeIndex: number };
+    const params = open?.action.args[0] as {
+      outcomeIndex: number;
+      key: { outcomeId: bigint };
+    };
     expect(params.outcomeIndex).toBe(1);
+    expect(params.key.outcomeId).toBe(market.key.outcomeId + 1n);
   });
 });

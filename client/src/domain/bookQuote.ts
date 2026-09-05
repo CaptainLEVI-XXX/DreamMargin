@@ -1,4 +1,4 @@
-import { mulDivUp, quantizeDown } from "./amounts";
+import { formatUnits, mulDivUp, quantizeDown } from "./amounts";
 
 /**
  * Bounded order-book walk.
@@ -120,6 +120,10 @@ export function planAcquisition(input: {
   }
 
   const other = input.side === "yes" ? "NO" : "YES";
+  // Native units are meaningless in copy; format against one whole unit.
+  const decimals = String(input.oneCollateral).length - 1;
+  const shown = (v: bigint) => formatUnits(v, decimals, 2);
+  const wanted = quote.fillable + quote.shortfall;
 
   return {
     fromBook: quote.fillable,
@@ -129,6 +133,9 @@ export function planAcquisition(input: {
     // market price is.
     mintCost: mulDivUp(quote.shortfall, input.oneCollateral, input.oneCollateral),
     limitYesPrice: quote.limitYesPrice,
-    note: `The book covers ${quote.fillable} of ${quote.fillable + quote.shortfall}. Minting the rest costs the full unit price and also gives you ${other} shares.`,
+    note:
+      quote.fillable === 0n
+        ? `The order book has no ${input.side.toUpperCase()} for sale. Minting ${shown(quote.shortfall)} costs the full unit price and also gives you ${shown(quote.shortfall)} ${other} shares.`
+        : `The book covers ${shown(quote.fillable)} of ${shown(wanted)}. Minting the remaining ${shown(quote.shortfall)} costs the full unit price and also gives you ${shown(quote.shortfall)} ${other} shares.`,
   };
 }

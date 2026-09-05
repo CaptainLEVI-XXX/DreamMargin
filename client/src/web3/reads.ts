@@ -1,4 +1,4 @@
-import type { Address, PublicClient } from "viem";
+import { parseAbi, type Address, type PublicClient } from "viem";
 import { DEPLOYMENT } from "../config/deployment";
 import type { CapHeadroom } from "../domain/credit";
 import type { MarketKey, VaultView } from "../domain/models";
@@ -29,26 +29,6 @@ const oracle = { address: DEPLOYMENT.oracle as Address, abi: oracleAbi } as cons
 export function utilizationBps(performingDebt: bigint, totalAssets: bigint): bigint {
   if (totalAssets === 0n) return 0n;
   return (performingDebt * 10_000n + totalAssets - 1n) / totalAssets;
-}
-
-/**
- * Split a block range into `eth_getLogs`-sized windows. Public RPCs cap the
- * range, so the scan from the deployment block must be chunked.
- */
-export function logChunks(
-  fromBlock: bigint,
-  toBlock: bigint,
-  chunkSize: bigint,
-): { from: bigint; to: bigint }[] {
-  if (chunkSize <= 0n) throw new Error("chunk size must be positive");
-  const chunks: { from: bigint; to: bigint }[] = [];
-  let cursor = fromBlock;
-  while (cursor <= toBlock) {
-    const end = cursor + chunkSize - 1n > toBlock ? toBlock : cursor + chunkSize - 1n;
-    chunks.push({ from: cursor, to: end });
-    cursor = end + 1n;
-  }
-  return chunks;
 }
 
 export type GlobalRisk = {
@@ -221,8 +201,69 @@ export type GenerationSnapshot = {
   frozen: boolean;
   /** True only when the on-chain key matches the candidate field by field. */
   keyMatches: boolean;
+  maintenanceLtvBps: bigint;
   headroomCaps: Pick<CapHeadroom, "position" | "outcome" | "market"> | null;
 };
+
+export type BinaryBook = {
+  yesBids: { price: bigint; quantity: bigint }[];
+  yesAsks: { price: bigint; quantity: bigint }[];
+  noBids: { price: bigint; quantity: bigint }[];
+  noAsks: { price: bigint; quantity: bigint }[];
+};
+
+const binaryPoolReadAbi = parseAbi([
+  "function getBookLevels(bool isBid, uint64 numLevels) view returns ((uint256 price, uint256 quantity)[] levels)",
+]);
+
+/** Read a bounded four-sided book directly from the DreamDEX pool. */
+export async function readBinaryBook(
+  client: PublicClient,
+  pool: Address,
+  oneCollateral: bigint,
+  depth = 8,
+): Promise<BinaryBook> {
+  const [yesBids, yesAsks] = await Promise.all([
+    client.readContract({
+      address: pool,
+      abi: binaryPoolReadAbi,
+      functionName: "getBookLevels",
+      args: [true, BigInt(depth)],
+    }),
+    client.readContract({
+      address: pool,
+      abi: binaryPoolReadAbi,
+      functionName: "getBookLevels",
+      args: [false, BigInt(depth)],
+    }),
+  ]);
+
+  const bids = [...yesBids];
+  const asks = [...yesAsks];
+  return {
+    yesBids: bids,
+    yesAsks: asks,
+    noBids: asks
+      .map((level) => ({ price: oneCollateral - level.price, quantity: level.quantity }))
+      .sort((a, b) => (a.price === b.price ? 0 : a.price > b.price ? -1 : 1)),
+    noAsks: bids
+      .map((level) => ({ price: oneCollateral - level.price, quantity: level.quantity }))
+      .sort((a, b) => (a.price === b.price ? 0 : a.price < b.price ? -1 : 1)),
+  };
+}
+
+/** Return whether a current DreamDEX market matches an enabled series policy. */
+export async function readPolicyEligibility(
+  client: PublicClient,
+  marketId: `0x${string}`,
+): Promise<{ policyId: `0x${string}`; eligible: boolean }> {
+  const result = (await client.readContract({
+    ...controller,
+    functionName: "policyFor",
+    args: [marketId],
+  })) as readonly [`0x${string}`, boolean];
+  return { policyId: result[0], eligible: result[1] };
+}
 
 /**
  * Generation eligibility. §9.1 requires the key to recompute correctly and match
@@ -240,7 +281,12 @@ export async function readGeneration(
     args: [gk],
   })) as unknown as {
     key: MarketKey;
-    risk: { maxDebtPerPosition: bigint; maxDebtPerOutcome: bigint; maxDebtPerMarket: bigint };
+    risk: {
+      maxDebtPerPosition: bigint;
+      maxDebtPerOutcome: bigint;
+      maxDebtPerMarket: bigint;
+      maintenanceLtvBps: number | bigint;
+    };
     enabled: boolean;
     frozen: boolean;
   };
@@ -252,6 +298,7 @@ export async function readGeneration(
     enabled: generation.enabled,
     frozen: generation.frozen,
     keyMatches: registered && marketKeysEqual(key, generation.key),
+    maintenanceLtvBps: BigInt(generation.risk.maintenanceLtvBps),
     headroomCaps: registered
       ? {
           position: generation.risk.maxDebtPerPosition,
@@ -262,38 +309,29 @@ export async function readGeneration(
   };
 }
 
-/**
- * Owner position ids from `PositionOpened` logs.
- *
- * The controller has no unbounded enumeration view, so logs from the deployment
- * block are the source of truth. Public RPCs cap `eth_getLogs` ranges, so the
- * scan is chunked and the caller can persist `nextFromBlock` as a cursor.
- */
-export async function listPositionIds(
+/** Read every owner position id through the controller's bounded pages. */
+export async function readPositionIds(
   client: PublicClient,
   owner: Address,
-  fromBlock: bigint,
-  toBlock: bigint,
-  chunkSize = 50_000n,
-): Promise<{ ids: bigint[]; nextFromBlock: bigint }> {
-  const event = controllerAbi.find((e) => e.type === "event" && e.name === "PositionOpened");
-  if (event === undefined) throw new Error("PositionOpened event missing from the ABI");
-
-  const ids: bigint[] = [];
-
-  for (const { from, to } of logChunks(fromBlock, toBlock, chunkSize)) {
-    const logs = await client.getLogs({
-      address: DEPLOYMENT.controller as Address,
-      event: event as never,
-      args: { owner } as never,
-      fromBlock: from,
-      toBlock: to,
-    });
-    for (const log of logs) {
-      const id = (log as unknown as { args?: { positionId?: bigint } }).args?.positionId;
-      if (id !== undefined) ids.push(id);
-    }
+  pageSize: number = DEPLOYMENT.maxPositionPageSize,
+): Promise<bigint[]> {
+  if (pageSize <= 0 || pageSize > DEPLOYMENT.maxPositionPageSize) {
+    throw new Error(`position page size must be between 1 and ${DEPLOYMENT.maxPositionPageSize}`);
   }
+  const ids: bigint[] = [];
+  let total = 0n;
 
-  return { ids, nextFromBlock: toBlock + 1n };
+  do {
+    const result = (await client.readContract({
+      ...controller,
+      functionName: "positionsOf",
+      args: [owner, BigInt(ids.length), BigInt(pageSize)],
+    })) as readonly [readonly bigint[], bigint];
+    const [page, count] = result;
+    total = count;
+    ids.push(...page);
+    if (page.length === 0) break;
+  } while (BigInt(ids.length) < total);
+
+  return ids;
 }

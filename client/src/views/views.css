@@ -153,6 +153,21 @@
   margin-bottom: calc(var(--dm-space) * 2);
 }
 
+.dm-back {
+  border: 0;
+  background: transparent;
+  color: var(--dm-text);
+  padding: 0;
+  margin-bottom: var(--dm-space);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  cursor: pointer;
+}
+
+.dm-back:hover {
+  color: var(--dm-ink);
+}
+
 .dm-side {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -217,4 +232,9 @@
   text-decoration: underline;
   cursor: pointer;
   font: inherit;
+}
+
+.dm-unknown {
+  color: var(--dm-text);
+  font-size: var(--dm-size-11);
 }

@@ -78,7 +78,7 @@ export function useIntentRunner(
         },
       });
 
-      void runIntent(
+      return runIntent(
         createIntent(action.reviewed),
         action.plan,
         capabilities,
@@ -90,6 +90,7 @@ export function useIntentRunner(
             ? current
             : transition(current, { type: "failed", message: explainRevert(error) }),
         );
+        return undefined;
       });
     },
     [account, capabilities, onSettled],

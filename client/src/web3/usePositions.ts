@@ -4,17 +4,15 @@ import { DEPLOYMENT } from "../config/deployment";
 import type { MarketView, PositionView } from "../domain/models";
 import { PositionStatus, type PositionStatusValue } from "../domain/protocol";
 import { controllerAbi } from "./abis/controllerAbi";
+import { vaultAbi } from "./abis/vaultAbi";
 import { createReadClient } from "./client";
-import { listPositionIds } from "./reads";
+import { readPositionIds } from "./reads";
 
 /**
  * The wallet's real positions.
  *
- * The controller has no enumeration view, so ids come from `PositionOpened`
- * logs filtered by the indexed owner topic, then each is read with
- * `getPosition`. Nothing here is a fixture: a card rendered from this can be
- * acted on, where one rendered from sample data would target a position id that
- * does not exist and revert with `PositionNotFound`.
+ * Ids come from the controller's bounded `positionsOf` pages, so an old position
+ * remains visible without scanning millions of RPC-limited log blocks.
  */
 
 export type PositionsState =
@@ -39,7 +37,7 @@ type RawPosition = {
   status: number;
 };
 
-export function usePositions(account: Address | null, market: MarketView) {
+export function usePositions(account: Address | null, markets: readonly MarketView[]) {
   const [state, setState] = useState<PositionsState>({ kind: "idle" });
   const [version, setVersion] = useState(0);
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
@@ -51,14 +49,7 @@ export function usePositions(account: Address | null, market: MarketView) {
     void (async () => {
       try {
         const client = createReadClient();
-        const head = await client.getBlockNumber();
-        const { ids } = await listPositionIds(
-          client,
-          account,
-          DEPLOYMENT.deployedAtBlock,
-          head,
-          50_000n,
-        );
+        const ids = await readPositionIds(client, account);
 
         if (ids.length === 0) {
           if (!cancelled) setState({ kind: "ready", positions: [] });
@@ -75,33 +66,75 @@ export function usePositions(account: Address | null, market: MarketView) {
             }),
           ),
         );
+        const debts = await Promise.all(
+          raws.map((raw) => {
+            const p = raw as unknown as RawPosition;
+            return client.readContract({
+              address: DEPLOYMENT.vault as Address,
+              abi: vaultAbi,
+              functionName: "debtAssets",
+              args: [p.debtShares],
+            });
+          }),
+        );
 
-        const positions: PositionView[] = raws
+        const positions = raws
           .map((raw, i) => {
             const p = raw as unknown as RawPosition;
             const status = Number(p.status) as PositionStatusValue;
+            const template = markets.find(
+              (candidate) => candidate.key.marketId.toLowerCase() === p.marketId.toLowerCase(),
+            );
+            if (template === undefined) return null;
+            const outcomeIndex = (p.outcomeIndex === 0 ? 0 : 1) as 0 | 1;
+            const price =
+              outcomeIndex === 0 ? template.yesPrice : template.oneCollateral - template.yesPrice;
+            const mark =
+              outcomeIndex === 0 ? template.riskMark : template.oneCollateral - template.riskMark;
+            const debtAssets = debts[i];
+            const riskValue = (p.shares * mark) / template.oneCollateral;
+            const maintenanceLtvBps = template.maintenanceLtvBps ?? 6_000n;
+            const debtCapacity = (riskValue * maintenanceLtvBps) / 10_000n;
+            const bufferBps =
+              debtCapacity === 0n || debtAssets >= debtCapacity
+                ? 0n
+                : ((debtCapacity - debtAssets) * 10_000n) / debtCapacity;
+            const liquidationPrice =
+              p.shares === 0n || maintenanceLtvBps === 0n
+                ? 0n
+                : (debtAssets * template.oneCollateral * 10_000n) / (p.shares * maintenanceLtvBps);
             return {
               positionId: ids[i],
               status,
-              // The market context the card renders against. Debt and health
-              // still need vault and oracle reads, which the detail panel adds.
-              market: { ...market, key: { ...market.key, outcomeId: p.outcomeId } },
-              outcomeIndex: (p.outcomeIndex === 0 ? 0 : 1) as 0 | 1,
+              market: {
+                ...template,
+                key: {
+                  ...template.key,
+                  pool: p.pool,
+                  outcomeToken: p.outcomeToken,
+                  outcomeId: p.outcomeId,
+                  marketNonce: p.marketNonce,
+                },
+              },
+              outcomeIndex,
               shares: p.shares,
-              debtAssets: p.debtShares,
-              equity: p.initialEquity,
-              marketValue: (p.shares * market.yesPrice) / market.oneCollateral,
-              riskValue: (p.shares * market.riskMark) / market.oneCollateral,
+              debtAssets,
+              equity: riskValue > debtAssets ? riskValue - debtAssets : 0n,
+              marketValue: (p.shares * price) / template.oneCollateral,
+              riskValue,
               unrealizedPnl: 0n,
-              bufferBps: 0n,
-              liquidationPrice: market.riskMark / 2n,
+              bufferBps,
+              liquidationPrice,
               accruedFinancing: 0n,
               annualRateBps: 500n,
               openedAt: p.openedAt,
               riskIncreaseCutoff: p.expiry,
             };
           })
-          .filter((p) => p.status !== PositionStatus.None && p.status !== PositionStatus.Closed);
+          .filter(
+            (p): p is PositionView =>
+              p !== null && p.status !== PositionStatus.None && p.status !== PositionStatus.Closed,
+          );
 
         if (!cancelled) setState({ kind: "ready", positions });
       } catch (error) {
@@ -117,7 +150,7 @@ export function usePositions(account: Address | null, market: MarketView) {
     return () => {
       cancelled = true;
     };
-  }, [account, market, version]);
+  }, [account, markets, version]);
 
   return { state, refresh };
 }

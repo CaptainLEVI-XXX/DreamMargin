@@ -10,6 +10,7 @@ import {
   deleverageIntent,
   faucetIntent,
   mintSetIntent,
+  observeIntent,
   repayIntent,
   settleIntent,
   vaultDepositIntent,
@@ -72,6 +73,16 @@ describe("faucet", () => {
 
   it("targets the collateral token", () => {
     expect(faucetIntent(100n * USDC).action.address).toBe(DEPLOYMENT.collateral);
+  });
+});
+
+describe("oracle refresh", () => {
+  it("is one permissionless write to the deployed oracle", () => {
+    const key = `0x${"11".repeat(32)}` as const;
+    const intent = observeIntent(key);
+    expect(intent.action.address).toBe(DEPLOYMENT.oracle);
+    expect(intent.action.args).toEqual([key]);
+    expect(intent.plan.calls).toHaveLength(1);
   });
 });
 

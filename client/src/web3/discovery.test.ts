@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchMarkets, leverageEligible, toCandidate, type IndexedMarket } from "./discovery";
+import { MARKETS } from "../config/deployment";
 import { generationKey } from "../domain/marketKey";
+import {
+  deployedCandidate,
+  fetchMarkets,
+  leverageEligible,
+  toCandidate,
+  type IndexedMarket,
+} from "./discovery";
 import type { GenerationSnapshot } from "./reads";
 
 /** A real indexer row for the live ETH daily market. */
@@ -70,6 +77,16 @@ describe("toCandidate", () => {
   });
 });
 
+describe("dedicated markets", () => {
+  it("reconstructs the committed generation keys exactly", () => {
+    for (const market of MARKETS) {
+      const candidate = deployedCandidate(market);
+      expect(generationKey(candidate.yesKey)).toBe(market.yesGenerationKey);
+      expect(generationKey(candidate.noKey)).toBe(market.noGenerationKey);
+    }
+  });
+});
+
 describe("fetchMarkets", () => {
   it("returns mapped candidates", async () => {
     const fetchImpl = vi.fn(
@@ -116,6 +133,7 @@ describe("leverageEligible", () => {
     enabled: true,
     frozen: false,
     keyMatches: true,
+    maintenanceLtvBps: 6_000n,
     headroomCaps: { position: 100_000_000n, outcome: 300_000_000n, market: 500_000_000n },
   };
 

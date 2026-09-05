@@ -57,7 +57,10 @@ export function availabilityFor(input: AvailabilityInput): Availability {
 
   return {
     canOpen: openBlockedReason === undefined,
-    canBuy: live && mode !== ProtocolMode.Paused,
+    // Buying is a DreamDEX action. DreamMargin's protocol mode governs credit,
+    // not the venue, so pausing this protocol must not stop someone trading the
+    // outcome outright — only leverage on it.
+    canBuy: live,
     // Risk-reducing actions survive every degraded mode. §4.3
     canRepay: live,
     canAddCollateral: live,

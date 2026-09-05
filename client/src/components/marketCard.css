@@ -2,60 +2,203 @@
   margin-bottom: var(--dm-space);
 }
 
-.dm-markets h2 {
-  margin-top: var(--dm-page-space);
-  margin-bottom: calc(var(--dm-space) * 2);
-}
-
-.dm-market-list {
-  display: grid;
-  gap: calc(var(--dm-space) * 2);
-}
-
-@media (min-width: 1024px) {
-  .dm-market-list {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-.dm-market-head {
-  display: flex;
-  justify-content: space-between;
-  gap: calc(var(--dm-space) * 2);
-  margin-bottom: calc(var(--dm-space) * 2);
-}
-
-.dm-market-time {
+.dm-markets-lede {
   font-size: var(--dm-size-13);
   color: var(--dm-text);
+  margin-bottom: var(--dm-page-space);
+}
+
+/* A scanning surface: hairline rows on the ground, no card chrome. §18.1
+   Fixed layout so a ticking countdown cannot resize the columns beside it. */
+.dm-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: var(--dm-size-13);
+}
+
+.dm-col-market {
+  width: auto;
+}
+.dm-col-narrow {
+  width: 5.5rem;
+}
+.dm-col-time {
+  width: 7rem;
+}
+.dm-col-price {
+  width: 5rem;
+}
+.dm-col-spark {
+  width: 6rem;
+}
+.dm-col-tag {
+  width: 7rem;
+}
+.dm-col-hold {
+  width: 6rem;
+}
+.dm-col-action {
+  width: 5.5rem;
+}
+
+.dm-table th,
+.dm-table td {
+  text-align: left;
+  padding: calc(var(--dm-space) * 1.25) var(--dm-space);
+  border-bottom: 1px solid var(--dm-divider);
+  vertical-align: middle;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.dm-market-prices {
-  display: flex;
-  gap: calc(var(--dm-space) * 3);
-  margin-bottom: calc(var(--dm-space) * 2);
+/* One treatment for the whole header row: every cell holds the same element. */
+.dm-table thead th {
+  border-bottom: 1px solid var(--dm-line);
+  padding-top: 0;
+  font-weight: 400;
 }
 
-.dm-market-facts {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--dm-space) calc(var(--dm-space) * 2);
-  font-size: var(--dm-size-13);
-  margin: 0 0 calc(var(--dm-space) * 2);
-}
-
-.dm-market-facts dt {
+.dm-table thead button,
+.dm-table thead span {
+  display: inline-block;
+  background: none;
+  border: none;
+  padding: 0;
   color: var(--dm-text);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  letter-spacing: 0;
 }
 
-.dm-market-facts dd {
-  margin: 0;
+.dm-table thead button {
+  cursor: pointer;
+}
+
+.dm-table thead button:hover {
   color: var(--dm-ink);
 }
 
-.dm-isolated {
+.dm-table thead button[data-active] {
+  color: var(--dm-ink);
+}
+
+.dm-table tbody tr:hover {
+  background: var(--dm-surface);
+}
+
+/* Numbers align on their right edge; tabular figures keep digits in column. */
+.dm-table .dm-num,
+.dm-table thead th.dm-num span,
+.dm-table thead th.dm-num button {
+  text-align: right;
+}
+
+.dm-table td.dm-num {
+  text-align: right;
+}
+
+.dm-row-asset {
+  display: block;
+  color: var(--dm-ink);
+  font-family: var(--dm-font-mono);
+  line-height: 1.3;
+}
+
+.dm-row-question {
+  display: block;
+  color: var(--dm-text);
+  font-size: var(--dm-size-11);
+  font-weight: 400;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dm-countdown {
+  color: var(--dm-ink);
+}
+
+.dm-tag {
+  display: inline-block;
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  color: var(--dm-text);
+  border: 1px solid var(--dm-line);
+  border-radius: var(--dm-radius);
+  padding: 2px 6px;
+  line-height: 1.3;
+}
+
+.dm-tag[data-on] {
+  color: var(--dm-ink);
+  border-color: var(--dm-accent);
+  background: var(--dm-accent-tint);
+}
+
+.dm-row-action {
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  background: transparent;
+  border: 1px solid var(--dm-line);
+  border-radius: var(--dm-radius);
+  color: var(--dm-ink);
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: border-color var(--dm-transition);
+}
+
+.dm-row-action:hover {
+  border-color: var(--dm-accent);
+}
+
+/* The sparkline is a block so it centres in the cell rather than sitting on
+   the text baseline. */
+.dm-cell-spark {
+  line-height: 0;
+}
+
+.dm-spark {
+  display: block;
+}
+
+.dm-spark path {
+  stroke: var(--dm-down);
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+}
+
+.dm-spark[data-up="true"] path {
+  stroke: var(--dm-up);
+}
+
+.dm-spark-empty {
+  color: var(--dm-text);
+}
+
+.dm-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Below the two-column breakpoint the table scrolls rather than the page. §18.1 */
+@media (max-width: 1023px) {
+  .dm-markets {
+    overflow-x: auto;
+  }
+}
+
+.dm-empty-note {
   font-size: var(--dm-size-13);
   color: var(--dm-text);
+  border: 1px solid var(--dm-line);
+  border-radius: var(--dm-radius);
+  padding: calc(var(--dm-space) * 2);
   margin-bottom: calc(var(--dm-space) * 2);
+  max-width: none;
 }

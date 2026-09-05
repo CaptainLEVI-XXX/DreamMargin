@@ -185,6 +185,9 @@ describe("planAcquisition", () => {
     });
     expect(plan.note).toMatch(/full unit price/i);
     expect(plan.note).toMatch(/NO shares/);
+    // Formatted, never native units: "6 of 10", not "6000000 of 10000000".
+    expect(plan.note).toMatch(/6 of 10\b/);
+    expect(plan.note).not.toMatch(/000000/);
   });
 
   it("names the opposite outcome correctly for a NO buy", () => {

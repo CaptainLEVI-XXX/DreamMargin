@@ -600,6 +600,22 @@ export const errorsAbi = [
   },
   {
     type: "error",
+    name: "NotReactivityPrecompile",
+    inputs: [
+      {
+        name: "caller",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "precompile",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
     name: "ObservationTooSoon",
     inputs: [
       {
@@ -866,6 +882,54 @@ export const errorsAbi = [
   },
   {
     type: "error",
+    name: "SeriesIntervalTooShort",
+    inputs: [
+      {
+        name: "marketId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "interval",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "minimumInterval",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "SeriesPolicyFrozen",
+    inputs: [
+      {
+        name: "policyId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "SeriesPolicyIdentityClaimed",
+    inputs: [
+      {
+        name: "identity",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "policyId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+  },
+  {
+    type: "error",
     name: "SettlementNotFinal",
     inputs: [
       {
@@ -977,6 +1041,17 @@ export const errorsAbi = [
   },
   {
     type: "error",
+    name: "UnsupportedCallbackEmitter",
+    inputs: [
+      {
+        name: "emitter",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
     name: "UnsupportedDecimals",
     inputs: [
       {
@@ -1010,6 +1085,28 @@ export const errorsAbi = [
         name: "orderType",
         type: "uint8",
         internalType: "uint8",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "UnsupportedSeriesIdentity",
+    inputs: [
+      {
+        name: "identity",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "UnsupportedSeriesPolicy",
+    inputs: [
+      {
+        name: "policyId",
+        type: "bytes32",
+        internalType: "bytes32",
       },
     ],
   },

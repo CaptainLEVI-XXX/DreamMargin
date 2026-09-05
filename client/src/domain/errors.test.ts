@@ -79,7 +79,7 @@ describe("mapping stays in step with the contracts", () => {
     // still shows the raw name.
     const traderFacing = CONTRACT_ERRORS.filter(
       (n) =>
-        !/^(Change|Already|Not(Configurator|Controller)|Unauthorized|Invalid(Facet|Bps)|Zero(Address|Denominator)|Unsupported(Decimals)|Loss|Recovery|Reserve|BalanceDelta|IntegrationValue|UnsafeMode|ValueOutOfBounds|TokenOperator|TokenApproval|OrderState|RestingOrder|InvalidBook|InsufficientDebtShares|PositionDepthExceeded|PositionNotLiquidatable|UnsupportedOrderType|GenerationAlreadyConfigured)/.test(
+        !/^(Change|Already|Not(Configurator|Controller|ReactivityPrecompile)|Unauthorized|Invalid(Facet|Bps)|Zero(Address|Denominator)|Unsupported(Decimals|CallbackEmitter)|SeriesPolicyIdentityClaimed|Loss|Recovery|Reserve|BalanceDelta|IntegrationValue|UnsafeMode|ValueOutOfBounds|TokenOperator|TokenApproval|OrderState|RestingOrder|InvalidBook|InsufficientDebtShares|PositionDepthExceeded|PositionNotLiquidatable|UnsupportedOrderType|GenerationAlreadyConfigured)/.test(
           n,
         ),
     );

@@ -17,6 +17,17 @@ describe("availabilityFor", () => {
     expect(a.canRepay).toBe(true);
   });
 
+  it("leaves spot buying alone when this protocol pauses", () => {
+    // Pausing DreamMargin pauses credit, not the DreamDEX venue.
+    expect(availabilityFor({ ...base, mode: ProtocolMode.Paused }).canBuy).toBe(true);
+    expect(availabilityFor({ ...base, mode: ProtocolMode.ReduceOnly }).canBuy).toBe(true);
+    expect(availabilityFor({ ...base, oracleStale: true }).canBuy).toBe(true);
+  });
+
+  it("stops buying only once the market itself is done", () => {
+    expect(availabilityFor({ ...base, status: PositionStatus.Resolved }).canBuy).toBe(false);
+  });
+
   it("blocks opening but keeps repay available when paused", () => {
     const a = availabilityFor({ ...base, mode: ProtocolMode.Paused });
     expect(a.canOpen).toBe(false);

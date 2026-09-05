@@ -5,10 +5,9 @@ import { Value } from "./Value";
 /**
  * Oracle freshness, stated plainly.
  *
- * Design D-8: clearing staleness needs at least three observations at least 30
- * seconds apart, so a one-click "refresh" button cannot do it and is not
- * offered. Freshness is a keeper's job (`script/observe-shannon.sh`); the
- * client's job is to say honestly how old the data is and what that blocks.
+ * Initial maturity needs three observations at least 30 seconds apart. Once a
+ * generation is mature, anyone can record a fresh sample; the trade screen
+ * offers that permissionless action when a quiet market becomes stale.
  *
  * frontend-spec §16.2: show observation age and whether data is live, delayed,
  * or stale — never a generic animated dot with no timestamp.

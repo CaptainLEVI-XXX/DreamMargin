@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TradeView } from "./TradeView";
 import { SCENARIOS } from "../fixtures/scenarios";
 import { EMPTY_BALANCES } from "../web3/tokens";
@@ -35,6 +35,21 @@ describe("layout", () => {
     render(view());
     expect(screen.getByRole("heading", { name: /Will ETH close/ })).toBeVisible();
     expect(screen.getByLabelText("Shares")).toBeVisible();
+  });
+
+  it("offers useful ranges for a long-duration market", () => {
+    render(view());
+    const ranges = screen.getByRole("group", { name: "Chart range" });
+    expect(ranges).toHaveTextContent("4H");
+    expect(ranges).toHaveTextContent("10D");
+    expect(ranges).toHaveTextContent("All");
+  });
+
+  it("returns to the market list without using global navigation", async () => {
+    const onBack = vi.fn();
+    render(view({ onBack }));
+    await userEvent.click(screen.getByRole("button", { name: /markets/i }));
+    expect(onBack).toHaveBeenCalledOnce();
   });
 
   it("offers YES and NO as one selector, not two screens", () => {
@@ -103,8 +118,48 @@ describe("book depth and minting", () => {
 
   it("explains the mint fallback and that it returns the other outcome", () => {
     render(view({ book: { asks: [{ yesPrice: 983_000n, quantity: 1_000_000n }], bids: [] } }));
-    expect(screen.getByText(/minting the rest/i)).toBeVisible();
+    expect(screen.getByText(/minting the remaining/i)).toBeVisible();
     expect(screen.getByText(/NO shares/)).toBeVisible();
+  });
+
+  it("states amounts in shares, never native units", () => {
+    const { container } = render(
+      view({ book: { asks: [{ yesPrice: 983_000n, quantity: 1_000_000n }], bids: [] } }),
+    );
+    // "1 of 5", not "1000000 of 5000000".
+    expect(container.textContent).not.toMatch(/\d{7,}/);
+  });
+
+  it("says plainly when the book is empty rather than implying partial cover", () => {
+    render(view({ book: { asks: [], bids: [] } }));
+    expect(screen.getByText(/order book has no YES for sale/i)).toBeVisible();
+  });
+});
+
+describe("honest pricing", () => {
+  it("shows the effective price paid, not the market price, when minting", () => {
+    // An empty book means every share is minted at one whole unit, so the
+    // market price is not what is being paid.
+    render(view({ book: { asks: [], bids: [] } }));
+    expect(screen.getByText("Price paid")).toBeVisible();
+    expect(screen.getByText("100¢")).toBeVisible();
+  });
+
+  it("shows the book price when the book fills the order", () => {
+    render(view());
+    expect(screen.getByText("98.3¢")).toBeVisible();
+  });
+
+  it("refuses to present a stale oracle's mark as a real value", () => {
+    // §4.5 keeps market price and risk mark distinct; echoing one as the other
+    // would invent the distinction the rule exists to preserve.
+    render(view({ market: { ...market, oracleStale: true } }));
+    expect(screen.getByText(/unavailable while risk data is stale/i)).toBeVisible();
+  });
+
+  it("says a market has never traded rather than showing a midpoint as fact", () => {
+    render(view({ market: { ...market, priceKnown: false } }));
+    expect(screen.getByText(/no trades yet/i)).toBeVisible();
   });
 });
 

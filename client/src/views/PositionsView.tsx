@@ -20,15 +20,17 @@ type Props = {
   onSettled?: () => void;
   /** True while positions are still being read from the chain. */
   loading?: boolean;
+  error?: string;
 };
 
 export function PositionsView({
   snapshot,
   account = null,
   collateralAllowance = 0n,
-  outcomeAllowance = 0n,
+  outcomeAllowance,
   onSettled,
   loading = false,
+  error,
 }: Props) {
   const ordered = [...snapshot.positions].sort((a, b) => attentionRank(a) - attentionRank(b));
   const decimals = snapshot.vault.collateralDecimals;
@@ -61,7 +63,11 @@ export function PositionsView({
         <p className="dm-empty-note">Reading your positions from the chain…</p>
       ) : null}
 
-      {!loading && account !== null && ordered.length === 0 ? (
+      {error === undefined || account === null ? null : (
+        <p className="dm-empty-note">Could not read your positions. {error}</p>
+      )}
+
+      {!loading && error === undefined && account !== null && ordered.length === 0 ? (
         <p className="dm-empty-note">
           No open positions. Buy an outcome on a market, then choose a multiple above 1x to open
           one.
@@ -77,7 +83,10 @@ export function PositionsView({
             primary={i === 0}
             account={account}
             collateralAllowance={collateralAllowance}
-            outcomeAllowance={outcomeAllowance}
+            outcomeAllowance={
+              outcomeAllowance ??
+              (p.outcomeIndex === 0 ? (p.market.yesAllowance ?? 0n) : (p.market.noAllowance ?? 0n))
+            }
             onSettled={onSettled}
           />
         ))}
