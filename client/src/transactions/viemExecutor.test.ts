@@ -1,10 +1,27 @@
+import { encodeErrorResult } from "viem";
 import { describe, expect, it } from "vitest";
+import { errorsAbi } from "../web3/abis/errorsAbi";
 import { explainRevert } from "./viemExecutor";
 
 describe("explainRevert", () => {
   it("maps a named contract error to its recovery copy", () => {
     expect(explainRevert(new Error("execution reverted: StaleOracle(0x12, 6826, 600)"))).toMatch(
       /stale/i,
+    );
+  });
+
+  it("decodes custom-error data returned without a readable message", () => {
+    const data = encodeErrorResult({
+      abi: errorsAbi,
+      errorName: "StaleOracle",
+      args: [`0x${"12".repeat(32)}`, 6826n, 600n],
+    });
+    expect(explainRevert({ data })).toMatch(/stale/i);
+  });
+
+  it("turns an ABI mismatch into a recovery action instead of viem internals", () => {
+    expect(explainRevert(new Error('Function "openPosition" not found on ABI.'))).toBe(
+      "The app could not prepare this transaction. Refresh the page to load the current contract interface.",
     );
   });
 

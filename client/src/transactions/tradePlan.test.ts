@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { encodeFunctionData } from "viem";
 import { planTrade } from "./tradePlan";
 import { planAcquisition, type BookLevel } from "../domain/bookQuote";
 import { SCENARIOS } from "../fixtures/scenarios";
@@ -70,6 +71,16 @@ describe("above 1x adds the position open", () => {
     expect(seq.committed).toBe(2n * ONE);
   });
 
+  it("matches the contract's spread-adjusted debt when execution is above the mark", () => {
+    const seq = trade({
+      market: { ...market, riskMark: 450_000n, yesPrice: 550_000n },
+      quantity: 2n * ONE,
+      leverageBps: 12_500n,
+    });
+    expect(seq.borrowed).toBe(215_217n);
+    expect(seq.intents.at(-1)?.reviewed.maxCollateralIn).toBe(215_217n);
+  });
+
   it("counts every confirmation across both intents", () => {
     // approve collateral, buy, approve outcome id, open
     expect(trade({ leverageBps: 15_000n }).confirmations).toBe(4);
@@ -79,6 +90,20 @@ describe("above 1x adds the position open", () => {
     const open = trade({ leverageBps: 15_000n }).intents[1];
     expect(open.reviewed.maxCollateralIn).toBe(trade({ leverageBps: 15_000n }).borrowed);
     expect(open.reviewed.minSharesOut).toBeGreaterThan(0n);
+  });
+
+  it("encodes the open with an ABI that contains openPosition", () => {
+    const open = trade({ leverageBps: 15_000n }).intents[1];
+    expect(open.action.abi).toContainEqual(
+      expect.objectContaining({ type: "function", name: "openPosition" }),
+    );
+    expect(() =>
+      encodeFunctionData({
+        abi: open.action.abi,
+        functionName: open.action.functionName,
+        args: open.action.args,
+      } as never),
+    ).not.toThrow();
   });
 
   it("approves the exact outcome id for exactly the committed shares", () => {

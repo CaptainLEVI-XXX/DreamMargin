@@ -27,12 +27,14 @@ h2,
 h3 {
   color: var(--dm-ink);
   font-weight: 600;
+  line-height: 1.12;
   letter-spacing: -0.02em;
   margin: 0;
 }
 
 h1 {
   font-size: var(--dm-size-30);
+  max-width: 24ch;
 }
 
 h2 {

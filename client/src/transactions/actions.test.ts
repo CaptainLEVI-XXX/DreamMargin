@@ -64,6 +64,38 @@ describe("expected events exist on-chain", () => {
     expect(vaultEvents).toContain(vaultDepositIntent(USDC, ME, 0n).expectedEvent);
     expect(vaultEvents).toContain(vaultWithdrawIntent(USDC, ME).expectedEvent);
   });
+
+  it("encodes every controller action with its generated function ABI", () => {
+    const intents = [
+      repayIntent(1n, USDC, 0n),
+      addCollateralIntent(1n, USDC, YES_ID, 0n),
+      withdrawCollateralIntent(1n, USDC),
+      deleverageIntent({
+        positionId: 1n,
+        sharesToSell: USDC,
+        minCollateralOut: 1n,
+        limitPrice: 1n,
+        deadlineSeconds: 1n,
+        lotSize: 1_000n,
+      }),
+      closeToOutcomeIntent(1n, USDC, 0n),
+      closeToCollateralIntent({
+        positionId: 1n,
+        maxRepayAssets: USDC,
+        minCollateralOut: 1n,
+        limitPrice: 1n,
+        deadlineSeconds: 1n,
+        allowance: 0n,
+      }),
+      settleIntent(1n),
+    ];
+
+    for (const intent of intents) {
+      expect(intent.action.abi, intent.action.functionName).toContainEqual(
+        expect.objectContaining({ type: "function", name: intent.action.functionName }),
+      );
+    }
+  });
 });
 
 describe("faucet", () => {

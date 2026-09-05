@@ -77,7 +77,10 @@ export function MarketChart({ series, strike, asset, height = 260 }: Props) {
       },
       // Hairlines only: §18.1 draws on the ground rather than in a panel.
       grid: { vertLines: { visible: false }, horzLines: { color: line, style: LineStyle.Dotted } },
-      rightPriceScale: { borderColor: line },
+      rightPriceScale: {
+        borderColor: line,
+        scaleMargins: { top: 0.12, bottom: 0.12 },
+      },
       timeScale: { borderColor: line, timeVisible: true, secondsVisible: false },
       crosshair: {
         mode: CrosshairMode.Normal,
@@ -95,6 +98,7 @@ export function MarketChart({ series, strike, asset, height = 260 }: Props) {
       borderDownColor: down,
       wickUpColor: up,
       wickDownColor: down,
+      priceFormat: { type: "price", precision: 2, minMove: 0.01 },
     });
 
     api.subscribeCrosshairMove((param) => {
@@ -154,7 +158,15 @@ export function MarketChart({ series, strike, asset, height = 260 }: Props) {
 
   const last = series.points.at(-1);
   const shown = readout ?? null;
-  const aboveStrike = strike === null || last === undefined ? null : last.close >= strike;
+  const displayedClose =
+    shown?.close ?? (last === undefined ? null : toFloat(last.close, series.decimals));
+  // The verdict must describe the candle shown in the readout. Previously a
+  // hovered historical price could appear beside the latest candle's verdict,
+  // producing contradictions such as “80,269 … below 79,690”.
+  const aboveStrike =
+    strike === null || displayedClose === null
+      ? null
+      : displayedClose >= toFloat(strike, series.decimals);
 
   return (
     <figure className="dm-chart">

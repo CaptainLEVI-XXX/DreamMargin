@@ -9,6 +9,40 @@
   margin-bottom: calc(var(--dm-space) * 2);
 }
 
+/* Labels and monetary values are a single, repeatable two-column system.
+   Leaving definition lists to browser defaults creates indented, centre-heavy
+   panels and mixes the prose face into financial labels. */
+.dm-market-facts {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 1fr) minmax(0, 1.4fr);
+  align-items: baseline;
+  gap: var(--dm-space) calc(var(--dm-space) * 2);
+  margin: 0;
+  padding: calc(var(--dm-space) * 1.5) 0;
+  border-top: 1px solid var(--dm-divider);
+  border-bottom: 1px solid var(--dm-divider);
+}
+
+.dm-market-facts dt {
+  color: var(--dm-muted);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.dm-market-facts dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--dm-ink-soft);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-13);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  text-align: right;
+}
+
 .dm-button {
   font-family: var(--dm-font-mono);
   font-size: var(--dm-size-13);

@@ -142,15 +142,24 @@
   gap: calc(var(--dm-space) * 3);
 }
 
+.dm-trade-context {
+  min-width: 0;
+}
+
 @media (min-width: 1024px) {
   .dm-trade {
     grid-template-columns: 1fr var(--dm-panel-width);
     align-items: start;
   }
+
+  .dm-trade > .dm-card {
+    position: sticky;
+    top: calc(var(--dm-space) * 2);
+  }
 }
 
 .dm-trade h1 {
-  margin-bottom: calc(var(--dm-space) * 2);
+  margin-bottom: calc(var(--dm-space) * 1.5);
 }
 
 .dm-back {
@@ -178,6 +187,10 @@
 /* YES and NO are a neutral-versus-selected pair, never green versus red:
    §18.3 reserves those for value movement and margin state. */
 .dm-side-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dm-space);
   border: 1px solid var(--dm-line);
   border-radius: var(--dm-radius);
   background: transparent;
@@ -200,8 +213,12 @@
 .dm-field {
   display: grid;
   gap: var(--dm-space);
-  font-size: var(--dm-size-13);
+  color: var(--dm-muted);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  letter-spacing: 0.08em;
   margin-bottom: calc(var(--dm-space) * 2);
+  text-transform: uppercase;
 }
 
 .dm-field input {
@@ -211,11 +228,19 @@
   color: var(--dm-ink);
   font-family: var(--dm-font-mono);
   font-size: var(--dm-size-17);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
   padding: calc(var(--dm-space) * 1.25) var(--dm-space);
+  text-transform: none;
 }
 
 .dm-trade-summary {
   margin-top: calc(var(--dm-space) * 2);
+}
+
+.dm-trade-summary dd {
+  color: var(--dm-ink);
+  font-size: var(--dm-size-17);
 }
 
 .dm-trade-note {

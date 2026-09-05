@@ -2,6 +2,7 @@ import { erc20Abi, parseAbi, type Address } from "viem";
 import { erc6909Abi } from "@somnia-chain/markets-sdk";
 import { DEPLOYMENT } from "../config/deployment";
 import { formatUnits, quantizeDown, quantizeUp } from "../domain/amounts";
+import { controllerAbi } from "../web3/abis/controllerAbi";
 import { oracleAbi } from "../web3/abis/oracleAbi";
 
 import type { Bounds } from "./bounds";
@@ -253,7 +254,7 @@ export function repayIntent(positionId: bigint, maxAssets: bigint, allowance: bi
     reviewed: { maxRepayAssets: maxAssets },
     action: {
       address: controller,
-      abi: [],
+      abi: controllerAbi,
       functionName: "repay",
       args: [positionId, maxAssets],
     },
@@ -290,7 +291,7 @@ export function addCollateralIntent(
     reviewed: {},
     action: {
       address: controller,
-      abi: [],
+      abi: controllerAbi,
       functionName: "addCollateral",
       args: [positionId, shares],
     },
@@ -312,7 +313,7 @@ export function withdrawCollateralIntent(positionId: bigint, shares: bigint): In
     reviewed: {},
     action: {
       address: controller,
-      abi: [],
+      abi: controllerAbi,
       functionName: "withdrawCollateral",
       args: [positionId, shares],
     },
@@ -340,7 +341,7 @@ export function deleverageIntent(input: {
     },
     action: {
       address: controller,
-      abi: [],
+      abi: controllerAbi,
       functionName: "deleverage",
       args: [
         {
@@ -383,7 +384,7 @@ export function closeToOutcomeIntent(
     reviewed: { maxRepayAssets },
     action: {
       address: controller,
-      abi: [],
+      abi: controllerAbi,
       functionName: "close",
       args: [
         {
@@ -436,7 +437,7 @@ export function closeToCollateralIntent(input: {
     },
     action: {
       address: controller,
-      abi: [],
+      abi: controllerAbi,
       functionName: "close",
       args: [
         {
@@ -466,7 +467,7 @@ export function settleIntent(positionId: bigint): Intent {
     label: "Settle position",
     plan: buildCallPlan({ action: { to: controller, label: "Settle position" } }),
     reviewed: {},
-    action: { address: controller, abi: [], functionName: "settle", args: [positionId] },
+    action: { address: controller, abi: controllerAbi, functionName: "settle", args: [positionId] },
     expectedEvent: "PositionSettled",
   };
 }

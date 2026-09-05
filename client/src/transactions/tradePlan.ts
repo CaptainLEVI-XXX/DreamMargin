@@ -1,13 +1,35 @@
 import type { Address } from "viem";
-import { formatUnits, mulDivDown } from "../domain/amounts";
+import { formatUnits, mulDivDown, quantizeDown } from "../domain/amounts";
 import type { AcquisitionPlan } from "../domain/bookQuote";
 import type { MarketView } from "../domain/models";
 import { buyOutcomeIntent, mintSetIntent, type Intent as ActionIntent } from "./actions";
 import { buildCallPlan } from "./callPlan";
 import { DEPLOYMENT } from "../config/deployment";
 import { erc6909Abi } from "@somnia-chain/markets-sdk";
+import { controllerAbi } from "../web3/abis/controllerAbi";
 
 const BPS = 10_000n;
+
+/** Mirror LibPositionRisk.targetDebtAtLimitDown with the same operation order. */
+function targetDebtAtLimitDown(
+  equity: bigint,
+  leverageBps: bigint,
+  markPrice: bigint,
+  limitSidePrice: bigint,
+): bigint {
+  const leverageDelta = leverageBps - BPS;
+  const nominalDebt = mulDivDown(equity, leverageDelta, BPS);
+  if (limitSidePrice <= markPrice) return nominalDebt;
+
+  const discountedEquity = mulDivDown(equity, leverageDelta, leverageBps);
+  const discountedMark = mulDivDown(markPrice, leverageDelta, leverageBps);
+  const adjustedDebt = mulDivDown(
+    discountedEquity,
+    limitSidePrice,
+    limitSidePrice - discountedMark,
+  );
+  return adjustedDebt < nominalDebt ? adjustedDebt : nominalDebt;
+}
 
 /**
  * Compose one trade into the ordered intents it actually requires.
@@ -95,10 +117,17 @@ export function planTrade(input: TradeInput): TradeSequence {
   const marketPrice =
     input.side === "yes" ? market.yesPrice : market.oneCollateral - market.yesPrice;
   const equity = mulDivDown(committed, riskMark, market.oneCollateral);
-  const borrowed = mulDivDown(equity, input.leverageBps - BPS, BPS);
+  const borrowed =
+    input.leverageBps > BPS
+      ? targetDebtAtLimitDown(equity, input.leverageBps, riskMark, marketPrice)
+      : 0n;
 
   if (input.leverageBps > BPS) {
-    const minSharesOut = (mulDivDown(borrowed, market.oneCollateral, marketPrice) * 9_900n) / BPS;
+    const purchaseQuantity = quantizeDown(
+      mulDivDown(borrowed, market.oneCollateral, marketPrice),
+      input.lotSize,
+    );
+    const minSharesOut = mulDivDown(purchaseQuantity, 9_900n, BPS);
 
     intents.push({
       label: `Open ${Number(input.leverageBps) / 10_000}x position`,
@@ -121,7 +150,7 @@ export function planTrade(input: TradeInput): TradeSequence {
       },
       action: {
         address: DEPLOYMENT.controller as Address,
-        abi: [],
+        abi: controllerAbi,
         functionName: "openPosition",
         args: [
           {

@@ -2,7 +2,7 @@
   margin: 0 0 calc(var(--dm-space) * 2);
   border: 1px solid var(--dm-line);
   border-radius: var(--dm-radius);
-  padding: calc(var(--dm-space) * 1.5);
+  padding: calc(var(--dm-space) * 2);
 }
 
 .dm-chart-range {
@@ -40,11 +40,16 @@
   gap: calc(var(--dm-space) * 2);
   font-size: var(--dm-size-11);
   font-family: var(--dm-font-mono);
-  color: var(--dm-text);
+  color: var(--dm-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .dm-chart-head {
   margin-bottom: var(--dm-space);
+}
+
+.dm-chart-head > span:first-child {
+  color: var(--dm-ink-soft);
 }
 
 .dm-chart-foot {

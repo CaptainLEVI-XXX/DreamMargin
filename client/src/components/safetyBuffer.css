@@ -9,7 +9,10 @@
   display: flex;
   justify-content: space-between;
   gap: calc(var(--dm-space) * 2);
-  font-size: var(--dm-size-13);
+  color: var(--dm-muted);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  font-variant-numeric: tabular-nums;
 }
 
 .dm-buffer-track {

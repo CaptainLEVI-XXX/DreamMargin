@@ -12,6 +12,8 @@
 
   /* Ink */
   --dm-text: #a8aaad;
+  --dm-muted: #8a8c90;
+  --dm-ink-soft: #e8e9ea;
   --dm-ink: #ffffff;
 
   /* Accent — fills exactly one object per view */

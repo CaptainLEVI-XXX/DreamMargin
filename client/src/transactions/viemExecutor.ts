@@ -1,7 +1,7 @@
 import {
   createWalletClient,
   custom,
-  decodeEventLog,
+  decodeErrorResult,
   parseEventLogs,
   type Address,
   type Hash,
@@ -46,16 +46,19 @@ export function explainRevert(error: unknown): string {
   const data = findRevertData(error);
   if (data !== null) {
     try {
-      const decoded = decodeEventLog({ abi: errorsAbi, data, topics: [] } as never) as {
-        eventName?: string;
+      const decoded = decodeErrorResult({ abi: errorsAbi, data }) as {
+        errorName?: string;
       };
-      if (decoded.eventName !== undefined) return describeContractError(decoded.eventName).message;
+      if (decoded.errorName !== undefined) return describeContractError(decoded.errorName).message;
     } catch {
       // Fall through to the name-matching path below.
     }
   }
 
   const message = error instanceof Error ? error.message : String(error);
+  if (/function .+ not found on abi/i.test(message)) {
+    return "The app could not prepare this transaction. Refresh the page to load the current contract interface.";
+  }
   const named = /([A-Z][A-Za-z0-9]+)\(/.exec(message);
   if (named !== null) {
     const copy = describeContractError(named[1]);
