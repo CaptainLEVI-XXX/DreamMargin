@@ -46,6 +46,9 @@ library LibShannonSetup {
   /// @notice Raw units in one tUSDC or one Shannon outcome share.
   uint256 internal constant UNIT = 1e6;
 
+  /// @notice Outcome depth certified by each Shannon demo oracle observation.
+  uint256 internal constant DEMO_ORACLE_DEPTH = 25_000 * UNIT;
+
   /// @notice Expected duration of a daily DreamDEX market.
   uint256 internal constant DAILY_INTERVAL = 1 days;
 
@@ -233,7 +236,10 @@ library LibShannonSetup {
       require(bids.length == 1 && asks.length == 1, "EMPTY_BOOK");
       require(bestBid.price != 0 && bestBid.price < bestAsk.price, "INVALID_BOOK");
       require(bestAsk.price < UNIT, "INVALID_ASK");
-      require(bestBid.quantity >= 20 * UNIT && bestAsk.quantity >= 20 * UNIT, "SHALLOW_BOOK");
+      require(
+        bestBid.quantity >= DEMO_ORACLE_DEPTH && bestAsk.quantity >= DEMO_ORACLE_DEPTH,
+        "SHALLOW_BOOK"
+      );
     }
 
     MarketKey memory yesKey = MarketKey({
@@ -279,8 +285,8 @@ library LibShannonSetup {
     returns (GlobalRiskConfig memory config)
   {
     config = GlobalRiskConfig({
-      maxDebtGlobal: 1_000 * UNIT,
-      maxDailyRealizedLoss: 100 * UNIT,
+      maxDebtGlobal: 40_000 * UNIT,
+      maxDailyRealizedLoss: 5_000 * UNIT,
       maxVaultUtilizationBps: 8_000,
       governanceDelay: governanceDelay,
       lossWindow: 1 days,
@@ -301,9 +307,9 @@ library LibShannonSetup {
     config = GenerationConfig({
       key: key,
       risk: RiskConfig({
-        maxDebtPerPosition: 100 * UNIT,
-        maxDebtPerOutcome: 300 * UNIT,
-        maxDebtPerMarket: 500 * UNIT,
+        maxDebtPerPosition: 10_000 * UNIT,
+        maxDebtPerOutcome: 20_000 * UNIT,
+        maxDebtPerMarket: 30_000 * UNIT,
         minDebt: UNIT,
         initialLtvBps: 6_000,
         maintenanceLtvBps: 7_500,
@@ -311,7 +317,7 @@ library LibShannonSetup {
         liquidationBonusBps: 500,
         maxSpreadBps: 1_000,
         maxSlippageBps: 1_000,
-        maxPositionDepthBps: 10_000,
+        maxPositionDepthBps: 8_000,
         maxLeverageBps: 20_000,
         openingCutoff: 1_200,
         reduceOnlyCutoff: 600,
@@ -343,7 +349,7 @@ library LibShannonSetup {
       minAge: minAge,
       updateInterval: updateInterval,
       staleAfter: staleAfter,
-      depthQuantity: uint128(20 * UNIT),
+      depthQuantity: uint128(DEMO_ORACLE_DEPTH),
       maxObservations: 16,
       maxBookLevels: 4,
       enabled: true

@@ -259,6 +259,26 @@ interface IDreamMarginController {
     uint256 deadline;
   }
 
+  /// @notice User bounds for one collateral-funded atomic leveraged opening.
+  /// @param key Exact DreamDEX generation and outcome purchased.
+  /// @param outcomeIndex Zero for YES or one for NO.
+  /// @param targetShares Exact final outcome quantity purchased into the position.
+  /// @param leverageBps Requested gross leverage ceiling, where 10,000 is 1x.
+  /// @param maxUserCollateralIn Maximum owner collateral pulled in native units.
+  /// @param maxDebt Maximum vault collateral debt admitted in native units.
+  /// @param limitPrice YES-side DreamDEX limit price in pool raw units.
+  /// @param deadline Latest transaction timestamp in seconds.
+  struct OpenFromCollateralParams {
+    MarketKey key;
+    uint8 outcomeIndex;
+    uint256 targetShares;
+    uint32 leverageBps;
+    uint256 maxUserCollateralIn;
+    uint256 maxDebt;
+    uint256 limitPrice;
+    uint256 deadline;
+  }
+
   /// @notice User bounds for selling collateral shares and repaying debt.
   /// @param positionId Position being reduced.
   /// @param sharesToSell Maximum recorded outcome shares offered to DreamDEX.
@@ -327,6 +347,14 @@ interface IDreamMarginController {
     uint256 initialShares,
     uint256 sharesBought,
     uint256 debtAssets
+  );
+
+  /// @notice Emitted after owner collateral and vault debt fund one atomic outcome purchase.
+  /// @param positionId Newly allocated position identifier.
+  /// @param owner Position owner and collateral payer.
+  /// @param userAssetsSpent Owner collateral consumed by the actual DreamDEX fill.
+  event CollateralFundedPositionOpened(
+    uint256 indexed positionId, address indexed owner, uint256 userAssetsSpent
   );
 
   /// @notice Emitted when exact outcome collateral is added without increasing debt.
@@ -413,6 +441,16 @@ interface IDreamMarginController {
     external
     returns (uint256 positionId, uint256 sharesBought, uint256 debtAssets);
 
+  /// @notice Opens one exact-size leveraged position from owner collateral in one atomic action.
+  /// @param params Exact generation, share target, leverage, spend, debt, price, and time bounds.
+  /// @return positionId Newly allocated position identifier.
+  /// @return userAssetsSpent Owner collateral consumed by execution, rounded from actual deltas.
+  /// @return sharesBought Exact outcome shares acquired into controller custody.
+  /// @return debtAssets Final vault collateral debt after unused borrowing is returned.
+  function openFromCollateral(OpenFromCollateralParams calldata params)
+    external
+    returns (uint256 positionId, uint256 userAssetsSpent, uint256 sharesBought, uint256 debtAssets);
+
   /// @notice Adds the exact recorded outcome ID without borrowing or trading.
   /// @param positionId Position receiving collateral.
   /// @param shares Outcome shares transferred from the caller.
@@ -495,6 +533,11 @@ interface IDreamMarginController {
     external
     view
     returns (GenerationConfig memory config);
+
+  /// @notice Returns the configured maximum resulting position size for one generation.
+  /// @param generationKey Full market-generation key.
+  /// @return shares Maximum total outcome shares admitted, rounded down.
+  function maximumPositionShares(bytes32 generationKey) external view returns (uint256 shares);
 
   /// @notice Returns one reusable series policy.
   /// @param policyId Governance-selected policy identifier.

@@ -1,14 +1,14 @@
 {
   "deployer": "0x41363507931dD8963f5Eb836E299D74272d0ccb0",
-  "deployerStartingNonce": 123,
-  "nextNonce": 132,
-  "transientProbe": "0xe7669056803F78D0545e4D44A48dD056EFeE8dfD",
+  "deployerStartingNonce": 211,
+  "nextNonce": 220,
+  "transientProbe": "0xCB69B24EDd916e6f3Ad5A29BbEF64153d6602894",
   "transientValidated": true,
-  "positionOpenFacet": "0xF812a2D9554D6D5E56bd0456992b6c62a16AF8Bf",
-  "positionCloseFacet": "0xb45D1b34B18827F5b5217544392dC544542d15fD",
-  "positionLiquidationFacet": "0x736Ece732a22192910666e24BecBB140a96AF8B5",
-  "positionSettlementFacet": "0x3eb01cf93886176dBe9cda61384084ea3c3be8b6",
-  "vault": "0x97cE780455c04398c6b4b079Dbb3F434619F8027",
-  "oracle": "0x979ADc628D88fb0499F0108C0968433B48b9259C",
-  "controller": "0xc141ba0c4f7bFAa72628f6Ea28F6e0118F154fe3"
+  "positionOpenFacet": "0xd4796A30BCC7b50728eb9c49e9Be01Ad5bAa6BA0",
+  "positionCloseFacet": "0xd593380b49e262Ed4F45Cb06F9A08d324316d2df",
+  "positionLiquidationFacet": "0x7f76b75841EE72F19341AbCddD65354c5E87903d",
+  "positionSettlementFacet": "0x9c09EA1a1dE2532843231f0fDe57e5AA38FCAE58",
+  "vault": "0xBe415FEB724999B6c99790c681B1297309C629E4",
+  "oracle": "0x9Dc09C580C8b5E1cc3Ba96135a99d50b2c0406e9",
+  "controller": "0x7237B9E2EE4247c911A8710e9325dB52Fc57Ef1B"
 }

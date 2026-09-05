@@ -401,11 +401,12 @@ contract PositionClose is DreamDexAdapter, DreamMarginReentrancyGuard {
     LibDreamMarginStorage.State storage self,
     Position storage position,
     uint256 remainingShares
-  ) private view {
+  ) private {
     bytes32 generationKey = _generationKey(position);
     GenerationConfig storage config = self.generations[generationKey];
     ValidatedGeneration memory generation =
       _validateGeneration(_moduleAddress(), _marketKey(position), position.outcomeIndex, true);
+    _refreshOracleIfDue(_oracleAddress(), generationKey);
     // The oracle itself rejects immature, stale, recycled, or terminal generation state.
     // forge-lint: disable-start(unused-return)
     (uint256 mark,,) = IDreamDexMarkOracle(_oracleAddress()).conservativeTwap(generationKey);

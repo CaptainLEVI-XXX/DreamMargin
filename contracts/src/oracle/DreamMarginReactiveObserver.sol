@@ -11,7 +11,6 @@ pragma solidity 0.8.34;
 import {IDreamDexMarkOracle} from "src/interfaces/dreammargin/IDreamDexMarkOracle.sol";
 import {ISomniaEventHandler} from "src/interfaces/integrations/ISomniaEventHandler.sol";
 
-import {ObservationRing, OracleConfig} from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.sol";
 import {LibDreamMarginErrors} from "src/libs/dreammargin/LibDreamMarginErrors.sol";
 
 /// @notice Stateless two-pool callback handler for DreamMargin mark observations.
@@ -97,17 +96,8 @@ contract DreamMarginReactiveObserver is ISomniaEventHandler {
   /// @notice Records one mark only after its own immutable update interval has elapsed.
   /// @param generationKey Exact outcome generation to refresh.
   function _observeWhenDue(bytes32 generationKey) private {
-    IDreamDexMarkOracle oracle = IDreamDexMarkOracle(ORACLE);
-    (OracleConfig memory config, ObservationRing memory ring) =
-      oracle.generationState(generationKey);
-    // The configured elapsed-time boundary deliberately throttles validator callbacks.
-    // forge-lint: disable-next-line(block-timestamp)
-    uint256 elapsed = block.timestamp - uint256(ring.newestTimestamp);
-    // Validator timestamp tolerance is negligible relative to the thirty-second throttle.
-    // forge-lint: disable-next-line(block-timestamp)
-    if (ring.cardinality != 0 && elapsed < uint256(config.updateInterval)) return;
-    // The observer persists and emits the complete returned sample on the oracle itself.
+    // The oracle owns the shared due-time check used by callbacks and position writes.
     // forge-lint: disable-next-line(unused-return)
-    oracle.observe(generationKey);
+    IDreamDexMarkOracle(ORACLE).observeIfDue(generationKey);
   }
 }

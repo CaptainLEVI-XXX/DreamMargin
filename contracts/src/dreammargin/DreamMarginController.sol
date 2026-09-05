@@ -218,6 +218,14 @@ contract DreamMarginController is IDreamMarginController, DreamDexAdapter {
   }
 
   /// @inheritdoc IDreamMarginController
+  function openFromCollateral(OpenFromCollateralParams calldata)
+    external
+    returns (uint256, uint256, uint256, uint256)
+  {
+    _delegateLifecycle(_POSITION_OPEN_FACET);
+  }
+
+  /// @inheritdoc IDreamMarginController
   function addCollateral(uint256, uint256) external {
     _delegateLifecycle(_POSITION_OPEN_FACET);
   }
@@ -325,6 +333,21 @@ contract DreamMarginController is IDreamMarginController, DreamDexAdapter {
     returns (GenerationConfig memory config)
   {
     config = LibDreamMarginStorage.get().generations[generationKey];
+  }
+
+  /// @inheritdoc IDreamMarginController
+  function maximumPositionShares(bytes32 generationKey) external view returns (uint256 shares) {
+    GenerationConfig storage config = LibDreamMarginStorage.get().generations[generationKey];
+    if (config.key.pool == address(0)) {
+      revert LibDreamMarginErrors.UnsupportedGeneration(generationKey);
+    }
+    // Only the immutable depth policy is required for this bounded UI view.
+    // forge-lint: disable-start(unused-return)
+    (OracleConfig memory oracleConfig,) =
+      IDreamDexMarkOracle(_ORACLE).generationState(generationKey);
+    // forge-lint: disable-end(unused-return)
+    shares = uint256(oracleConfig.depthQuantity) * config.risk.maxPositionDepthBps
+      / LibDreamMarginConstants.BPS;
   }
 
   /// @inheritdoc IDreamMarginController

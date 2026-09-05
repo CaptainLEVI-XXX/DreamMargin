@@ -102,6 +102,7 @@ write_manifest() {
     --arg schema "dreammargin.shannon-demo-markets.v1" \
     --argjson chainId 50312 \
     --arg owner "$ACCOUNT" \
+    --arg dreamMarginController "$CONTROLLER" \
     --arg operatorId "${operator_id:-}" \
     --arg venueId "${venue_id:-}" \
     --arg creator "${creator:-}" \
@@ -117,7 +118,7 @@ write_manifest() {
     --arg policyId "${policy_id:-}" \
     --arg policyChangeId "${policy_change_id:-}" \
     --arg policyStatus "${policy_status:-unconfigured}" \
-    '$existing + {schema:$schema,chainId:$chainId,owner:$owner,operatorId:$operatorId,venueId:$venueId,creator:$creator,creatorPolicy:$creatorPolicy,creatorFunded:$creatorFunded,venuePolicyUpdated:$venuePolicyUpdated,reactivityConfigured:$reactivityConfigured,btcMarketId:$btcMarketId,ethMarketId:$ethMarketId,intervalSeconds:$intervalSeconds,minimumLifetimeSeconds:$minimumLifetimeSeconds,expectedExpiry:$expectedExpiry,dreamMarginPolicyId:$policyId,dreamMarginPolicyChangeId:$policyChangeId,dreamMarginPolicyStatus:$policyStatus}' \
+    '$existing + {schema:$schema,chainId:$chainId,owner:$owner,dreamMarginController:$dreamMarginController,operatorId:$operatorId,venueId:$venueId,creator:$creator,creatorPolicy:$creatorPolicy,creatorFunded:$creatorFunded,venuePolicyUpdated:$venuePolicyUpdated,reactivityConfigured:$reactivityConfigured,btcMarketId:$btcMarketId,ethMarketId:$ethMarketId,intervalSeconds:$intervalSeconds,minimumLifetimeSeconds:$minimumLifetimeSeconds,expectedExpiry:$expectedExpiry,dreamMarginPolicyId:$policyId,dreamMarginPolicyChangeId:$policyChangeId,dreamMarginPolicyStatus:$policyStatus}' \
     >"$OUTPUT"
 }
 
@@ -139,6 +140,11 @@ load_manifest() {
   policy_id="$(jq -r '.dreamMarginPolicyId // empty' "$OUTPUT")"
   policy_change_id="$(jq -r '.dreamMarginPolicyChangeId // empty' "$OUTPUT")"
   policy_status="$(jq -r '.dreamMarginPolicyStatus // "unconfigured"' "$OUTPUT")"
+  local recorded_controller
+  recorded_controller="$(jq -r '.dreamMarginController // empty' "$OUTPUT")"
+  if [[ "$(lower "$recorded_controller")" != "$(lower "$CONTROLLER")" ]]; then
+    policy_status="unconfigured"
+  fi
 }
 
 validate_lifetime() {
@@ -271,8 +277,8 @@ create() {
 
 policy_tuple() {
   local risk oracle
-  risk='(100000000,300000000,500000000,1000000,6000,7500,8000,500,1000,1000,10000,20000,1200,600,3600,4,6,0)'
-  oracle="($MIN_AGE,$UPDATE_INTERVAL,$STALE_AFTER,20000000,16,4)"
+  risk='(10000000000,20000000000,30000000000,1000000,6000,7500,8000,500,1000,1000,8000,20000,1200,600,3600,4,6,0)'
+  oracle="($MIN_AGE,$UPDATE_INTERVAL,$STALE_AFTER,25000000000,16,4)"
   printf '(%s,%s,%s,%s,%s,%s,%s,true,false)' \
     "$creator" "$venue_id" "$operator_id" "$COLLATERAL" "$POLICY_MIN_INTERVAL" "$risk" "$oracle"
 }

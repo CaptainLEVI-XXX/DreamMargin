@@ -10,6 +10,7 @@ import {DreamDexAdapter} from "src/adapters/DreamDexAdapter.sol";
 import {IDreamDexMarkOracle} from "src/interfaces/dreammargin/IDreamDexMarkOracle.sol";
 import {IDreamMarginController} from "src/interfaces/dreammargin/IDreamMarginController.sol";
 import {IDreamMarginVault} from "src/interfaces/dreammargin/IDreamMarginVault.sol";
+import {IERC20Minimal} from "src/interfaces/integrations/IERC20Minimal.sol";
 import {IERC6909} from "src/interfaces/integrations/IERC6909.sol";
 
 import {LibDreamMarginConstants} from "src/libs/dreammargin/LibDreamMarginConstants.sol";
@@ -19,6 +20,7 @@ import {OracleConfig} from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.so
 import {
   GenerationConfig,
   LibDreamMarginStorage,
+  MarketKey,
   Position,
   PositionStatus,
   ProtocolMode
@@ -52,6 +54,18 @@ contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
     uint256 finalDebtAssets;
   }
 
+  /// @notice Shared validated state reused by both opening funding routes.
+  /// @param generationKey Hash of the exact registered generation tuple.
+  /// @param mark Mature refreshed conservative mark in collateral native units.
+  /// @param sidePrice Selected-outcome limit price in collateral native units.
+  /// @param generation Fully validated live DreamDEX generation.
+  struct OpenPreparation {
+    bytes32 generationKey;
+    uint256 mark;
+    uint256 sidePrice;
+    ValidatedGeneration generation;
+  }
+
   /// @notice Opens one isolated leveraged position atomically through the controller.
   /// @param params Exact generation, collateral, leverage, price, fill, and deadline bounds.
   /// @return positionId Newly allocated position identifier.
@@ -63,47 +77,27 @@ contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
     returns (uint256 positionId, uint256 sharesBought, uint256 debtAssets)
   {
     LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
-    if (self.mode != ProtocolMode.ACTIVE) {
-      revert LibDreamMarginErrors.ActionBlocked(
-        uint8(self.mode), IDreamMarginController.openPosition.selector
-      );
-    }
     if (params.initialShares == 0) revert LibDreamMarginErrors.ZeroAmount(params.initialShares);
 
+    OpenPreparation memory prepared = _prepareOpen(
+      self,
+      params.key,
+      params.outcomeIndex,
+      params.leverageBps,
+      params.limitPrice,
+      IDreamMarginController.openPosition.selector
+    );
     OpenAccounting memory accounting;
-    accounting.generationKey = LibDreamMarginStorage.generationKey(params.key);
+    accounting.generationKey = prepared.generationKey;
     GenerationConfig storage config = self.generations[accounting.generationKey];
-    _requireOpenGeneration(self, config, accounting.generationKey, params);
-    ValidatedGeneration memory generation =
-      _validateGeneration(_moduleAddress(), params.key, params.outcomeIndex, true);
-    _requireOpeningWindow(generation.expiry, config.risk.openingCutoff);
-
-    // The oracle itself validates maturity, freshness, and a nonempty observation window.
-    // forge-lint: disable-start(unused-return)
-    (uint256 mark,,) =
-      IDreamDexMarkOracle(_oracleAddress()).conservativeTwap(accounting.generationKey);
-    // forge-lint: disable-end(unused-return)
-    accounting.initialEquity =
-      LibPositionRisk.collateralValueDown(params.initialShares, mark, generation.oneCollateral);
+    accounting.initialEquity = LibPositionRisk.collateralValueDown(
+      params.initialShares, prepared.mark, prepared.generation.oneCollateral
+    );
     if (accounting.initialEquity == 0) {
       revert LibDreamMarginErrors.InsufficientHealth(0, 1);
     }
-    if (
-      params.leverageBps <= LibDreamMarginConstants.BPS
-        || params.leverageBps > config.risk.maxLeverageBps
-    ) {
-      revert LibDreamMarginErrors.ValueOutOfBounds(
-        "LEVERAGE_BPS", params.leverageBps, config.risk.maxLeverageBps
-      );
-    }
-    if (
-      params.limitPrice == 0 || params.limitPrice >= generation.oneCollateral
-        || params.limitPrice % generation.orderBook.tickSize != 0
-    ) revert LibDreamMarginErrors.InvalidTick(params.limitPrice, generation.orderBook.tickSize);
-    uint256 sidePrice =
-      params.outcomeIndex == 0 ? params.limitPrice : generation.oneCollateral - params.limitPrice;
     accounting.targetDebt = LibPositionRisk.targetDebtAtLimitDown(
-      accounting.initialEquity, params.leverageBps, mark, sidePrice
+      accounting.initialEquity, params.leverageBps, prepared.mark, prepared.sidePrice
     );
     if (accounting.targetDebt > params.maxCollateralIn) {
       revert LibDreamMarginErrors.ExcessiveCollateralIn(
@@ -112,12 +106,13 @@ contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
     }
     _requireDebtBounds(self, config, accounting.targetDebt);
 
-    uint256 quantity =
-      FixedPointMathLib.fullMulDiv(accounting.targetDebt, generation.oneCollateral, sidePrice);
-    quantity -= quantity % generation.orderBook.lotSize;
+    uint256 quantity = FixedPointMathLib.fullMulDiv(
+      accounting.targetDebt, prepared.generation.oneCollateral, prepared.sidePrice
+    );
+    quantity -= quantity % prepared.generation.orderBook.lotSize;
     if (quantity == 0) {
       revert LibDreamMarginErrors.QuantizedToZero(
-        accounting.targetDebt, generation.orderBook.lotSize
+        accounting.targetDebt, prepared.generation.orderBook.lotSize
       );
     }
 
@@ -154,44 +149,141 @@ contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
       resultingShares,
       accounting.finalDebtAssets,
       accounting.initialEquity,
-      mark,
-      generation.oneCollateral,
+      prepared.mark,
+      prepared.generation.oneCollateral,
       params.leverageBps
     );
     _requireDebtBounds(self, config, accounting.finalDebtAssets);
 
-    positionId = self.nextPositionId;
-    self.nextPositionId = positionId + 1;
-    self.positions[positionId] = Position({
-      owner: msg.sender,
-      marketId: params.key.marketId,
-      pool: params.key.pool,
-      outcomeToken: params.key.outcomeToken,
-      outcomeId: params.key.outcomeId,
-      shares: _uint128("POSITION_SHARES", resultingShares),
-      debtShares: _uint128("POSITION_DEBT_SHARES", accounting.finalDebtShares),
-      initialEquity: _uint128("INITIAL_EQUITY", accounting.initialEquity),
-      marketNonce: params.key.marketNonce,
-      openedAt: _timestamp40(),
-      expiry: _uint40("EXPIRY", generation.expiry),
-      outcomeIndex: params.outcomeIndex,
-      status: PositionStatus.ACTIVE
-    });
-    self.ownerPositionIds[msg.sender].push(positionId);
-    self.attributedShares[params.key.outcomeToken][params.key.outcomeId] += resultingShares;
-    self.outcomeDebtShares[accounting.generationKey] += accounting.finalDebtShares;
-    self.marketDebtShares[config.marketGroup] += accounting.finalDebtShares;
-    self.totalDebtShares += accounting.finalDebtShares;
-
     sharesBought = accounting.sharesBought;
     debtAssets = accounting.finalDebtAssets;
-    emit IDreamMarginController.PositionOpened(
-      positionId,
-      msg.sender,
+    positionId = _recordPosition(
+      self,
+      config,
+      params.key,
+      params.outcomeIndex,
       accounting.generationKey,
+      prepared.generation.expiry,
+      resultingShares,
+      accounting.finalDebtShares,
+      accounting.initialEquity,
       params.initialShares,
       sharesBought,
       debtAssets
+    );
+  }
+
+  /// @notice Opens one exact-size isolated position from owner collateral and vault debt.
+  /// @param params Exact generation, share target, leverage, spend, debt, price, and time bounds.
+  /// @return positionId Newly allocated position identifier.
+  /// @return userAssetsSpent Owner collateral consumed by the actual fill.
+  /// @return sharesBought Exact outcome shares acquired into controller custody.
+  /// @return debtAssets Final vault collateral debt after unused borrowing is returned.
+  function openFromCollateral(IDreamMarginController.OpenFromCollateralParams calldata params)
+    external
+    nonReentrant
+    returns (uint256 positionId, uint256 userAssetsSpent, uint256 sharesBought, uint256 debtAssets)
+  {
+    if (params.targetShares == 0) revert LibDreamMarginErrors.ZeroAmount(params.targetShares);
+    LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
+    OpenPreparation memory prepared = _prepareOpen(
+      self,
+      params.key,
+      params.outcomeIndex,
+      params.leverageBps,
+      params.limitPrice,
+      IDreamMarginController.openFromCollateral.selector
+    );
+    if (
+      params.targetShares < prepared.generation.orderBook.minQuantity
+        || params.targetShares % prepared.generation.orderBook.lotSize != 0
+    ) {
+      revert LibDreamMarginErrors.InvalidLot(
+        params.targetShares, prepared.generation.orderBook.lotSize
+      );
+    }
+
+    GenerationConfig storage config = self.generations[prepared.generationKey];
+    _requirePositionDepth(config, prepared.generationKey, params.targetShares);
+    uint256 grossValue = LibPositionRisk.collateralValueDown(
+      params.targetShares, prepared.mark, prepared.generation.oneCollateral
+    );
+    uint256 maximumCost = FixedPointMathLib.fullMulDivUp(
+      params.targetShares, prepared.sidePrice, prepared.generation.oneCollateral
+    );
+    uint256 valueEquity =
+      FixedPointMathLib.fullMulDivUp(grossValue, LibDreamMarginConstants.BPS, params.leverageBps);
+    uint256 costEquity =
+      FixedPointMathLib.fullMulDivUp(maximumCost, LibDreamMarginConstants.BPS, params.leverageBps);
+    uint256 valueDebt = grossValue > valueEquity ? grossValue - valueEquity : 0;
+    uint256 costDebt = maximumCost > costEquity ? maximumCost - costEquity : 0;
+    uint256 targetDebt = valueDebt < costDebt ? valueDebt : costDebt;
+    if (targetDebt > params.maxDebt) {
+      revert LibDreamMarginErrors.ExcessiveCollateralIn(targetDebt, params.maxDebt);
+    }
+    _requireDebtBounds(self, config, targetDebt);
+
+    uint256 userAssetsRequired = maximumCost - targetDebt;
+    if (userAssetsRequired > params.maxUserCollateralIn) {
+      revert LibDreamMarginErrors.ExcessiveCollateralIn(
+        userAssetsRequired, params.maxUserCollateralIn
+      );
+    }
+    _pullExactAsset(params.key.collateral, msg.sender, userAssetsRequired);
+    IDreamMarginVault vault_ = IDreamMarginVault(_vaultAddress());
+    uint256 borrowedShares = vault_.borrow(targetDebt, address(this));
+    ExecutionResult memory execution = _buyOutcome(
+      _moduleAddress(),
+      ImmediateOrder({
+        key: params.key,
+        outcomeIndex: params.outcomeIndex,
+        price: params.limitPrice,
+        quantity: params.targetShares,
+        minimumOutput: params.targetShares,
+        maximumInput: maximumCost,
+        deadline: params.deadline,
+        orderType: LibDreamMarginConstants.ORDER_TYPE_FOK,
+        userData: _positionUserData(self.nextPositionId)
+      })
+    );
+
+    uint256 unusedAssets = maximumCost - execution.collateralAmount;
+    uint256 unusedBorrow = unusedAssets < targetDebt ? unusedAssets : targetDebt;
+    uint256 finalDebtShares = _returnUnusedBorrow(vault_, borrowedShares, unusedBorrow);
+    uint256 userRefund = unusedAssets - unusedBorrow;
+    if (userRefund != 0) _sendExactAsset(params.key.collateral, msg.sender, userRefund);
+    userAssetsSpent = userAssetsRequired - userRefund;
+    sharesBought = execution.outcomeAmount;
+    debtAssets = vault_.debtAssets(finalDebtShares);
+    uint256 initialEquity = grossValue > debtAssets ? grossValue - debtAssets : 0;
+
+    _requirePostTradeRisk(
+      config,
+      prepared.generationKey,
+      sharesBought,
+      debtAssets,
+      initialEquity,
+      prepared.mark,
+      prepared.generation.oneCollateral,
+      params.leverageBps
+    );
+    _requireDebtBounds(self, config, debtAssets);
+    positionId = _recordPosition(
+      self,
+      config,
+      params.key,
+      params.outcomeIndex,
+      prepared.generationKey,
+      prepared.generation.expiry,
+      sharesBought,
+      finalDebtShares,
+      initialEquity,
+      0,
+      sharesBought,
+      debtAssets
+    );
+    emit IDreamMarginController.CollateralFundedPositionOpened(
+      positionId, msg.sender, userAssetsSpent
     );
   }
 
@@ -239,16 +331,64 @@ contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
     oracle_ = IDreamMarginController(address(this)).oracle();
   }
 
+  /// @notice Validates shared admission state and returns one refreshed conservative mark.
+  /// @param self Controller namespace containing generation and protocol state.
+  /// @param key Exact DreamDEX generation and outcome.
+  /// @param outcomeIndex Zero for YES or one for NO.
+  /// @param leverageBps Requested gross leverage ceiling.
+  /// @param limitPrice YES-side DreamDEX limit price.
+  /// @param selector Public opening selector used when the protocol mode blocks admission.
+  /// @return prepared Fully validated generation, mark, and selected-outcome limit price.
+  function _prepareOpen(
+    LibDreamMarginStorage.State storage self,
+    MarketKey calldata key,
+    uint8 outcomeIndex,
+    uint256 leverageBps,
+    uint256 limitPrice,
+    bytes4 selector
+  ) private returns (OpenPreparation memory prepared) {
+    if (self.mode != ProtocolMode.ACTIVE) {
+      revert LibDreamMarginErrors.ActionBlocked(uint8(self.mode), selector);
+    }
+    prepared.generationKey = LibDreamMarginStorage.generationKey(key);
+    GenerationConfig storage config = self.generations[prepared.generationKey];
+    _requireOpenGeneration(self, config, prepared.generationKey, key, outcomeIndex);
+    prepared.generation = _validateGeneration(_moduleAddress(), key, outcomeIndex, true);
+    _requireOpeningWindow(prepared.generation.expiry, config.risk.openingCutoff);
+    if (leverageBps <= LibDreamMarginConstants.BPS || leverageBps > config.risk.maxLeverageBps) {
+      revert LibDreamMarginErrors.ValueOutOfBounds(
+        "LEVERAGE_BPS", leverageBps, config.risk.maxLeverageBps
+      );
+    }
+    if (
+      limitPrice == 0 || limitPrice >= prepared.generation.oneCollateral
+        || limitPrice % prepared.generation.orderBook.tickSize != 0
+    ) {
+      revert LibDreamMarginErrors.InvalidTick(limitPrice, prepared.generation.orderBook.tickSize);
+    }
+    prepared.sidePrice =
+      outcomeIndex == 0 ? limitPrice : prepared.generation.oneCollateral - limitPrice;
+
+    address oracle_ = _oracleAddress();
+    _refreshOracleIfDue(oracle_, prepared.generationKey);
+    // The oracle validates maturity, freshness, and a nonempty retained window.
+    // forge-lint: disable-start(unused-return)
+    (prepared.mark,,) = IDreamDexMarkOracle(oracle_).conservativeTwap(prepared.generationKey);
+    // forge-lint: disable-end(unused-return)
+  }
+
   /// @notice Requires an exact enabled controller record matching all opening parameters.
   /// @param self Controller namespace containing reusable policy links.
   /// @param config Stored generation configuration.
   /// @param generationKey Derived generation identifier.
-  /// @param params User-supplied opening parameters.
+  /// @param key User-supplied exact generation tuple.
+  /// @param outcomeIndex User-supplied selected outcome.
   function _requireOpenGeneration(
     LibDreamMarginStorage.State storage self,
     GenerationConfig storage config,
     bytes32 generationKey,
-    IDreamMarginController.OpenParams calldata params
+    MarketKey calldata key,
+    uint8 outcomeIndex
   ) private view {
     if (config.frozen) {
       revert LibDreamMarginErrors.GenerationFrozen(generationKey);
@@ -265,11 +405,66 @@ contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
         revert LibDreamMarginErrors.UnsupportedSeriesPolicy(policyId);
       }
     }
-    if (config.risk.outcomeIndex != params.outcomeIndex) {
+    if (config.risk.outcomeIndex != outcomeIndex) {
       revert LibDreamMarginErrors.GenerationMismatch(
-        generationKey, LibDreamMarginStorage.generationKey(params.key)
+        generationKey, LibDreamMarginStorage.generationKey(key)
       );
     }
+  }
+
+  /// @notice Records one reconciled position and updates every aggregate debt bucket.
+  /// @param self Controller namespace receiving position state.
+  /// @param config Exact generation policy containing the market debt group.
+  /// @param key Exact DreamDEX generation and outcome.
+  /// @param outcomeIndex Zero for YES or one for NO.
+  /// @param generationKey Hash of the exact generation tuple.
+  /// @param expiry Immutable DreamDEX trading expiry in seconds.
+  /// @param shares Total attributed outcome shares.
+  /// @param debtShares Final vault debt shares.
+  /// @param initialEquity Conservative owner equity recognized at opening.
+  /// @param initialShares Existing outcome shares contributed by the owner, or zero.
+  /// @param sharesBought Outcome shares acquired from DreamDEX.
+  /// @param debtAssets Final debt in collateral native units.
+  /// @return positionId Newly allocated position identifier.
+  function _recordPosition(
+    LibDreamMarginStorage.State storage self,
+    GenerationConfig storage config,
+    MarketKey calldata key,
+    uint8 outcomeIndex,
+    bytes32 generationKey,
+    uint256 expiry,
+    uint256 shares,
+    uint256 debtShares,
+    uint256 initialEquity,
+    uint256 initialShares,
+    uint256 sharesBought,
+    uint256 debtAssets
+  ) private returns (uint256 positionId) {
+    positionId = self.nextPositionId;
+    self.nextPositionId = positionId + 1;
+    self.positions[positionId] = Position({
+      owner: msg.sender,
+      marketId: key.marketId,
+      pool: key.pool,
+      outcomeToken: key.outcomeToken,
+      outcomeId: key.outcomeId,
+      shares: _uint128("POSITION_SHARES", shares),
+      debtShares: _uint128("POSITION_DEBT_SHARES", debtShares),
+      initialEquity: _uint128("INITIAL_EQUITY", initialEquity),
+      marketNonce: key.marketNonce,
+      openedAt: _timestamp40(),
+      expiry: _uint40("EXPIRY", expiry),
+      outcomeIndex: outcomeIndex,
+      status: PositionStatus.ACTIVE
+    });
+    self.ownerPositionIds[msg.sender].push(positionId);
+    self.attributedShares[key.outcomeToken][key.outcomeId] += shares;
+    self.outcomeDebtShares[generationKey] += debtShares;
+    self.marketDebtShares[config.marketGroup] += debtShares;
+    self.totalDebtShares += debtShares;
+    emit IDreamMarginController.PositionOpened(
+      positionId, msg.sender, generationKey, initialShares, sharesBought, debtAssets
+    );
   }
 
   /// @notice Requires strictly more time than the configured no-borrow cutoff.
@@ -371,17 +566,7 @@ contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
     uint256 oneCollateral,
     uint256 requestedLeverage
   ) private view {
-    // Conservative TWAP validation above already proved the ring is mature.
-    // forge-lint: disable-start(unused-return)
-    (OracleConfig memory oracleConfig,) =
-      IDreamDexMarkOracle(_oracleAddress()).generationState(generationKey);
-    // forge-lint: disable-end(unused-return)
-    uint256 maxShares = FixedPointMathLib.fullMulDiv(
-      oracleConfig.depthQuantity, config.risk.maxPositionDepthBps, LibDreamMarginConstants.BPS
-    );
-    if (shares > maxShares) {
-      revert LibDreamMarginErrors.PositionDepthExceeded(shares, maxShares);
-    }
+    _requirePositionDepth(config, generationKey, shares);
     uint256 grossValue = LibPositionRisk.collateralValueDown(shares, mark, oneCollateral);
     PositionHealth memory health = LibPositionRisk.positionHealth(grossValue, debtAssets);
     if (health.ltvBps > config.risk.initialLtvBps) {
@@ -410,6 +595,28 @@ contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
     }
   }
 
+  /// @notice Enforces the configured share of oracle-certified executable depth.
+  /// @param config Exact generation risk policy.
+  /// @param generationKey Exact generation identifier.
+  /// @param shares Resulting total position shares.
+  function _requirePositionDepth(
+    GenerationConfig storage config,
+    bytes32 generationKey,
+    uint256 shares
+  ) private view {
+    // Conservative TWAP validation above already proved the ring is mature.
+    // forge-lint: disable-start(unused-return)
+    (OracleConfig memory oracleConfig,) =
+      IDreamDexMarkOracle(_oracleAddress()).generationState(generationKey);
+    // forge-lint: disable-end(unused-return)
+    uint256 maxShares = FixedPointMathLib.fullMulDiv(
+      oracleConfig.depthQuantity, config.risk.maxPositionDepthBps, LibDreamMarginConstants.BPS
+    );
+    if (shares > maxShares) {
+      revert LibDreamMarginErrors.PositionDepthExceeded(shares, maxShares);
+    }
+  }
+
   /// @notice Pulls one exact outcome ID using only its per-ID user allowance.
   /// @param token ERC-6909 outcome-token contract.
   /// @param outcomeId Exact outcome ID transferred.
@@ -428,6 +635,34 @@ contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
     uint256 afterBalance = outcome.balanceOf(address(this), outcomeId);
     if (!success || afterBalance < beforeBalance || afterBalance - beforeBalance != shares) {
       revert LibDreamMarginErrors.BalanceDeltaMismatch(token, beforeBalance + shares, afterBalance);
+    }
+  }
+
+  /// @notice Pulls exact collateral and rejects taxed or otherwise nonstandard balance deltas.
+  /// @param asset Collateral token.
+  /// @param payer Position owner supplying collateral.
+  /// @param amount Exact collateral required at the user limit price.
+  function _pullExactAsset(address asset, address payer, uint256 amount) private {
+    uint256 beforeBalance = IERC20Minimal(asset).balanceOf(address(this));
+    // Opening collateral is always pulled from the current position owner.
+    // forge-lint: disable-next-line(arbitrary-send-erc20)
+    asset.safeTransferFrom(payer, address(this), amount);
+    uint256 afterBalance = IERC20Minimal(asset).balanceOf(address(this));
+    if (afterBalance < beforeBalance || afterBalance - beforeBalance != amount) {
+      revert LibDreamMarginErrors.BalanceDeltaMismatch(asset, beforeBalance + amount, afterBalance);
+    }
+  }
+
+  /// @notice Sends an exact unused collateral refund after execution reconciliation.
+  /// @param asset Collateral token.
+  /// @param receiver Position owner receiving the refund.
+  /// @param amount Exact collateral refund.
+  function _sendExactAsset(address asset, address receiver, uint256 amount) private {
+    uint256 beforeBalance = IERC20Minimal(asset).balanceOf(address(this));
+    asset.safeTransfer(receiver, amount);
+    uint256 afterBalance = IERC20Minimal(asset).balanceOf(address(this));
+    if (afterBalance > beforeBalance || beforeBalance - afterBalance != amount) {
+      revert LibDreamMarginErrors.BalanceDeltaMismatch(asset, beforeBalance - amount, afterBalance);
     }
   }
 

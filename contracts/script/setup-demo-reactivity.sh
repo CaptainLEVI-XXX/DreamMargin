@@ -8,6 +8,7 @@ DEPLOYMENT="$CONTRACTS_DIR/deployments/shannon-deployment.json"
 MARKETS="$CONTRACTS_DIR/deployments/shannon-demo-markets.json"
 PRECOMPILE="0x0000000000000000000000000000000000000100"
 SUBSCRIBE_SIGNATURE='subscribe((bytes32[4],address,address,address,address,bytes4,uint64,uint64,uint64,bool,bool))(uint256)'
+UNSUBSCRIBE_SIGNATURE='unsubscribe(uint256)'
 ZERO="0x0000000000000000000000000000000000000000"
 ZERO_TOPIC="0x0000000000000000000000000000000000000000000000000000000000000000"
 CALLBACK_SELECTOR="0x53edf33d"
@@ -31,6 +32,27 @@ ETH_NO_KEY="$(jq -r '.ethNoGenerationKey' "$MARKETS")"
 OBSERVER="$(jq -r '.reactiveObserver // empty' "$MARKETS")"
 BTC_SUBSCRIPTION_ID="$(jq -r '.btcSubscriptionId // 0' "$MARKETS")"
 ETH_SUBSCRIPTION_ID="$(jq -r '.ethSubscriptionId // 0' "$MARKETS")"
+
+if [[ -n "$OBSERVER" ]]; then
+  bound_oracle="$(cast call "$OBSERVER" 'ORACLE()(address)' --rpc-url "$RPC_URL" 2>/dev/null || true)"
+  if [[ "$(printf '%s' "$bound_oracle" | tr '[:upper:]' '[:lower:]')" != \
+    "$(printf '%s' "$ORACLE" | tr '[:upper:]' '[:lower:]')" ]]; then
+    for subscription_id in "$BTC_SUBSCRIPTION_ID" "$ETH_SUBSCRIPTION_ID"; do
+      if (( subscription_id != 0 )); then
+        receipt="$(cast send "$PRECOMPILE" "$UNSUBSCRIBE_SIGNATURE" "$subscription_id" \
+          --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --json)"
+        if [[ "$(jq -r '.status' <<<"$receipt")" != "0x1" ]]; then
+          echo "Could not retire stale Reactivity subscription $subscription_id." >&2
+          exit 1
+        fi
+        echo "Retired stale Reactivity subscription $subscription_id."
+      fi
+    done
+    OBSERVER=""
+    BTC_SUBSCRIPTION_ID=0
+    ETH_SUBSCRIPTION_ID=0
+  fi
+fi
 
 minimum_balance="32000000000000000000"
 owner_balance="$(cast balance "$ACCOUNT" --rpc-url "$RPC_URL" | awk '{print $1}')"
@@ -78,9 +100,10 @@ fi
 
 jq \
   --arg observer "$OBSERVER" \
+  --arg observerOracle "$ORACLE" \
   --argjson btcSubscriptionId "$BTC_SUBSCRIPTION_ID" \
   --argjson ethSubscriptionId "$ETH_SUBSCRIPTION_ID" \
-  '.reactiveObserver = $observer | .btcSubscriptionId = $btcSubscriptionId | .ethSubscriptionId = $ethSubscriptionId' \
+  '.reactiveObserver = $observer | .reactiveObserverOracle = $observerOracle | .btcSubscriptionId = $btcSubscriptionId | .ethSubscriptionId = $ethSubscriptionId' \
   "$MARKETS" >"$MARKETS.tmp"
 mv "$MARKETS.tmp" "$MARKETS"
 

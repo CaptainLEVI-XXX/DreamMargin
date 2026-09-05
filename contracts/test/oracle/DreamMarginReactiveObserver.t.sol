@@ -53,6 +53,21 @@ contract ReactiveOracleStub {
     // forge-lint: disable-next-line(unsafe-typecast)
     observation.timestamp = uint40(block.timestamp);
   }
+
+  /// @notice Records only when the stub's thirty-second interval has elapsed.
+  /// @param generationKey Exact generation sampled.
+  /// @return recorded True when this call persisted a new sample.
+  function observeIfDue(bytes32 generationKey) external returns (bool recorded) {
+    uint40 newest = newestTimestamp[generationKey];
+    // Test-only stub mirrors the production oracle's timestamp throttle.
+    // forge-lint: disable-next-line(block-timestamp)
+    if (newest != 0 && block.timestamp < uint256(newest) + 30) return false;
+    ++observations[generationKey];
+    // Foundry test timestamps remain far below the uint40 protocol horizon.
+    // forge-lint: disable-next-line(unsafe-typecast)
+    newestTimestamp[generationKey] = uint40(block.timestamp);
+    recorded = true;
+  }
 }
 
 /// @notice Exercises the two-pool callback boundary with few focused cases.

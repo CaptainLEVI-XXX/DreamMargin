@@ -8,12 +8,15 @@
     "explorerUrl": "https://shannon-explorer.somnia.network"
   },
   "dreamMargin": {
-    "controller": "0xc141ba0c4f7bFAa72628f6Ea28F6e0118F154fe3",
-    "vault": "0x97cE780455c04398c6b4b079Dbb3F434619F8027",
-    "oracle": "0x979ADc628D88fb0499F0108C0968433B48b9259C",
-    "reactiveObserver": "0x117189C8ab4c6Aeb07Cc2c863c724A154ECBb1A5",
+    "controller": "0x7237B9E2EE4247c911A8710e9325dB52Fc57Ef1B",
+    "vault": "0xBe415FEB724999B6c99790c681B1297309C629E4",
+    "oracle": "0x9Dc09C580C8b5E1cc3Ba96135a99d50b2c0406e9",
+    "reactiveObserver": "0xB1945D0bfAfBb047010BAaD5E46B889b9cE5de13",
     "seriesPolicyId": "0x8a2256ecf5f0225a38c67e560c1157ab952e4a72f46da40fcb7196373bd0ea7c",
     "maxLeverageBps": 20000,
+    "maximumPositionShares": "20000000000",
+    "certifiedDepthShares": "25000000000",
+    "seededBookShares": "50000000000",
     "maxPositionPageSize": 100,
     "openingCutoffSeconds": 1200,
     "oracleMinAgeSeconds": 60,
@@ -48,7 +51,7 @@
       "expiry": 1792368000,
       "settlementWindowSeconds": 86400,
       "resolutionReserveWei": "200000000000000000",
-      "reactivitySubscriptionId": 16076670
+      "reactivitySubscriptionId": 16100558
     },
     {
       "symbol": "ETH",
@@ -65,7 +68,7 @@
       "expiry": 1792368000,
       "settlementWindowSeconds": 86400,
       "resolutionReserveWei": "200000000000000000",
-      "reactivitySubscriptionId": 16076681
+      "reactivitySubscriptionId": 16100571
     }
   ]
 }

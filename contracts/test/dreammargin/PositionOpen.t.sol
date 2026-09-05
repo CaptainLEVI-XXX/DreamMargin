@@ -16,7 +16,7 @@ import {IDreamDexBinaryPool} from "src/interfaces/integrations/IDreamDexBinaryPo
 
 import {LibDreamMarginConstants} from "src/libs/dreammargin/LibDreamMarginConstants.sol";
 import {LibDreamMarginErrors} from "src/libs/dreammargin/LibDreamMarginErrors.sol";
-import {OracleConfig} from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.sol";
+import {ObservationRing, OracleConfig} from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.sol";
 import {
   GenerationConfig,
   GlobalRiskConfig,
@@ -144,6 +144,7 @@ contract PositionOpenTest is Test {
     vm.startPrank(_OWNER);
     _outcome.approve(address(_controller), _YES_ID, type(uint256).max);
     _outcome.approve(address(_controller), _NO_ID, type(uint256).max);
+    _collateral.approve(address(_controller), type(uint256).max);
     vm.stopPrank();
   }
 
@@ -171,6 +172,66 @@ contract PositionOpenTest is Test {
     assertEq(marketDebt, position.debtShares);
     assertEq(totalDebt, position.debtShares);
     assertEq(_vault.totalDebtShares(), totalDebt);
+  }
+
+  /// @notice Buys one exact-size YES position from owner collateral and vault debt atomically.
+  function test_openFromCollateralReconcilesOwnerSpendDebtAndShares() external {
+    IDreamMarginController.OpenFromCollateralParams memory params =
+      IDreamMarginController.OpenFromCollateralParams({
+        key: _yesKey,
+        outcomeIndex: 0,
+        targetShares: 40 * _ONE,
+        leverageBps: 20_000,
+        maxUserCollateralIn: 10 * _ONE,
+        maxDebt: 10 * _ONE,
+        limitPrice: 500_000,
+        deadline: block.timestamp + 600
+      });
+
+    vm.prank(_OWNER);
+    (uint256 positionId, uint256 userAssetsSpent, uint256 sharesBought, uint256 debtAssets) =
+      _controller.openFromCollateral(params);
+    Position memory position = _controller.getPosition(positionId);
+
+    assertEq(position.owner, _OWNER);
+    assertEq(position.shares, 40 * _ONE);
+    assertEq(position.debtShares, 10 * _ONE);
+    assertEq(position.initialEquity, 10 * _ONE);
+    assertEq(userAssetsSpent, 10 * _ONE);
+    assertEq(sharesBought, 40 * _ONE);
+    assertEq(debtAssets, 10 * _ONE);
+    assertEq(_collateral.balanceOf(address(_controller)), 0);
+    assertEq(_outcome.balanceOf(address(_controller), _YES_ID), 40 * _ONE);
+    assertEq(_pool.lastOrderType(), LibDreamMarginConstants.ORDER_TYPE_FOK);
+    assertEq(_controller.maximumPositionShares(_yesGeneration), 50 * _ONE);
+  }
+
+  /// @notice Rejects an oversized collateral-funded target before pulling cash or trading.
+  function test_openFromCollateralPreflightsCertifiedDepth() external {
+    IDreamMarginController.OpenFromCollateralParams memory params =
+      IDreamMarginController.OpenFromCollateralParams({
+        key: _yesKey,
+        outcomeIndex: 0,
+        targetShares: 51 * _ONE,
+        leverageBps: 20_000,
+        maxUserCollateralIn: 100 * _ONE,
+        maxDebt: 100 * _ONE,
+        limitPrice: 500_000,
+        deadline: block.timestamp + 600
+      });
+    uint256 ownerAssets = _collateral.balanceOf(_OWNER);
+
+    vm.prank(_OWNER);
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        LibDreamMarginErrors.PositionDepthExceeded.selector, 51 * _ONE, 50 * _ONE
+      )
+    );
+    _controller.openFromCollateral(params);
+
+    assertEq(_collateral.balanceOf(_OWNER), ownerAssets);
+    assertEq(_pool.submissionCount(), 0);
+    assertEq(_vault.performingDebt(), 0);
   }
 
   /// @notice Paginates every owner position without relying on historical event scans.
@@ -323,16 +384,15 @@ contract PositionOpenTest is Test {
     assertEq(attributed, _outcome.balanceOf(address(_controller), _YES_ID));
   }
 
-  /// @notice Fails closed when the oracle's newest observation exceeds its freshness bound.
-  function test_staleOraclePreventsAnyBorrowOrCollateralMovement() external {
+  /// @notice Refreshes a mature stale oracle inside the opening transaction.
+  function test_openRefreshesStaleOracleWithoutSeparateTransaction() external {
     vm.warp(block.timestamp + 121);
-    vm.prank(_OWNER);
-    vm.expectRevert(
-      abi.encodeWithSelector(LibDreamMarginErrors.StaleOracle.selector, _yesGeneration, 121, 120)
-    );
-    _controller.openPosition(_yesParams());
-    assertEq(_vault.performingDebt(), 0);
-    assertEq(_outcome.balanceOf(address(_controller), _YES_ID), 0);
+    (uint256 positionId,, uint256 debtAssets) = _open(_yesParams());
+    (, ObservationRing memory ring) = _oracle.generationState(_yesGeneration);
+
+    assertEq(positionId, 1);
+    assertEq(debtAssets, 10 * _ONE);
+    assertEq(ring.newestTimestamp, block.timestamp);
   }
 
   /// @notice Rejects a generation frozen by the guardian before touching owner balances.
@@ -482,6 +542,7 @@ contract PositionOpenTest is Test {
     vm.stopPrank();
     _outcome.mint(_OWNER, _YES_ID, 100 * _ONE);
     _outcome.mint(_OWNER, _NO_ID, 100 * _ONE);
+    _collateral.mint(_OWNER, 1_000 * _ONE);
     _outcome.mint(address(_pool), _YES_ID, 500 * _ONE);
     _outcome.mint(address(_pool), _NO_ID, 500 * _ONE);
   }

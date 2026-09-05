@@ -312,9 +312,10 @@ contract PositionLiquidation is DreamDexAdapter, DreamMarginReentrancyGuard {
     GenerationConfig storage config,
     bytes32 generationKey,
     uint256 positionId
-  ) private view returns (LiquidationSnapshot memory snapshot) {
+  ) private returns (LiquidationSnapshot memory snapshot) {
     snapshot.generationKey = generationKey;
     snapshot.debtAssets = _vault().debtAssets(position.debtShares);
+    _refreshOracleIfDue(_oracleAddress(), generationKey);
     uint256 seizureValue;
     (snapshot.liquidationValue, snapshot.oneOutcome, seizureValue) =
       _currentRecovery(position, config, generationKey);

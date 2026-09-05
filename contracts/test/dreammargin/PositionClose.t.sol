@@ -16,7 +16,7 @@ import {IDreamDexBinaryPool} from "src/interfaces/integrations/IDreamDexBinaryPo
 
 import {LibDreamMarginConstants} from "src/libs/dreammargin/LibDreamMarginConstants.sol";
 import {LibDreamMarginErrors} from "src/libs/dreammargin/LibDreamMarginErrors.sol";
-import {OracleConfig} from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.sol";
+import {ObservationRing, OracleConfig} from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.sol";
 import {
   GenerationConfig,
   GlobalRiskConfig,
@@ -222,22 +222,21 @@ contract PositionCloseTest is Test {
     _assertAggregates(position.shares, position.debtShares);
   }
 
-  /// @notice Stale pricing blocks leveraged release but never traps debt-free collateral.
-  function test_staleOracleBlocksLeveragedWithdrawalButNotDebtFreeWithdrawal() external {
+  /// @notice Refreshes a mature stale oracle inside a conservatively safe withdrawal.
+  function test_withdrawalRefreshesStaleOracleWithoutSeparateTransaction() external {
     uint256 positionId = _open();
+    vm.prank(_OWNER);
+    _controller.repay(positionId, 6 * _ONE);
     vm.warp(block.timestamp + 121);
 
     vm.prank(_OWNER);
-    vm.expectRevert();
-    _controller.withdrawCollateral(positionId, _ONE);
+    _controller.withdrawCollateral(positionId, 10 * _ONE);
+    (, ObservationRing memory ring) = _oracle.generationState(_generationKey);
 
-    vm.prank(_OWNER);
-    _controller.repay(positionId, 50 * _ONE);
-    vm.prank(_OWNER);
-    _controller.withdrawCollateral(positionId, 40 * _ONE);
     Position memory position = _controller.getPosition(positionId);
-    assertEq(uint8(position.status), uint8(PositionStatus.CLOSED));
-    _assertAggregates(0, 0);
+    assertEq(position.shares, 30 * _ONE);
+    assertEq(ring.newestTimestamp, block.timestamp);
+    _assertAggregates(position.shares, position.debtShares);
   }
 
   /// @notice Applies actual partial-fill proceeds to debt before exposing any owner collateral.

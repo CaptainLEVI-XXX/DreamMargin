@@ -16,7 +16,7 @@ import {IDreamDexBinaryPool} from "src/interfaces/integrations/IDreamDexBinaryPo
 
 import {LibDreamMarginConstants} from "src/libs/dreammargin/LibDreamMarginConstants.sol";
 import {LibDreamMarginErrors} from "src/libs/dreammargin/LibDreamMarginErrors.sol";
-import {OracleConfig} from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.sol";
+import {ObservationRing, OracleConfig} from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.sol";
 import {
   GenerationConfig,
   GlobalRiskConfig,
@@ -362,18 +362,19 @@ contract PositionLiquidationTest is Test {
     _assertPosition(positionId, 40 * _ONE, 10 * _ONE, PositionStatus.ACTIVE);
   }
 
-  /// @notice Fails closed when the TWAP is stale even though a current executable book exists.
-  function test_staleOracleBlocksBothLiquidationRoutes() external {
+  /// @notice Refreshes a mature stale oracle inside a permissionless liquidation.
+  function test_liquidationRefreshesStaleOracleWithoutSeparateTransaction() external {
     uint256 positionId = _open();
     _makeUnhealthy(300_000);
     vm.warp(block.timestamp + 121);
 
     vm.prank(_LIQUIDATOR);
-    vm.expectPartialRevert(LibDreamMarginErrors.StaleOracle.selector);
-    _controller.liquidate(_take(positionId, 10 * _ONE, 0));
-    vm.prank(_LIQUIDATOR);
-    vm.expectPartialRevert(LibDreamMarginErrors.StaleOracle.selector);
-    _controller.liquidate(_sale(positionId, 10 * _ONE, 300_000));
+    (uint256 repaid, uint256 seized,) = _controller.liquidate(_take(positionId, 10 * _ONE, 0));
+    (, ObservationRing memory ring) = _oracle.generationState(_generationKey);
+
+    assertGt(repaid, 0);
+    assertGt(seized, 0);
+    assertEq(ring.newestTimestamp, block.timestamp);
   }
 
   /// @notice Routes resolved markets exclusively to settlement rather than ordinary liquidation.

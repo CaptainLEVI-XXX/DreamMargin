@@ -90,6 +90,26 @@ contract DreamDexMarkOracle is IDreamDexMarkOracle, DreamDexAdapter {
 
   /// @inheritdoc IDreamDexMarkOracle
   function observe(bytes32 generationKey) external returns (MarkObservation memory observation) {
+    (bool recorded, MarkObservation memory sampled) = _observe(generationKey, true);
+    // Strict mode either records or reverts when the interval has not elapsed.
+    assert(recorded);
+    observation = sampled;
+  }
+
+  /// @inheritdoc IDreamDexMarkOracle
+  function observeIfDue(bytes32 generationKey) external returns (bool recorded) {
+    (recorded,) = _observe(generationKey, false);
+  }
+
+  /// @notice Validates and optionally records one due observation.
+  /// @param generationKey Full market-generation key.
+  /// @param strict Whether an early call reverts instead of returning false.
+  /// @return recorded Whether a new observation was persisted.
+  /// @return observation Newly persisted observation, or zero values when skipped.
+  function _observe(bytes32 generationKey, bool strict)
+    private
+    returns (bool recorded, MarkObservation memory observation)
+  {
     LibDreamDexMarkOracleStorage.State storage self = LibDreamDexMarkOracleStorage.get();
     OracleConfig storage config = self.configs[generationKey];
     if (!config.enabled) revert LibDreamMarginErrors.UnsupportedGeneration(generationKey);
@@ -101,6 +121,7 @@ contract DreamDexMarkOracle is IDreamDexMarkOracle, DreamDexAdapter {
     if (ring.cardinality != 0) {
       uint256 elapsed = timestamp - ring.newestTimestamp;
       if (elapsed < config.updateInterval) {
+        if (!strict) return (recorded, observation);
         revert LibDreamMarginErrors.ObservationTooSoon(elapsed, config.updateInterval);
       }
     }
@@ -142,6 +163,7 @@ contract DreamDexMarkOracle is IDreamDexMarkOracle, DreamDexAdapter {
     uint16 oldestIndex = ring.cardinality == config.maxObservations ? ring.nextIndex : 0;
     ring.oldestTimestamp = self.observations[generationKey][oldestIndex].timestamp;
     emit ObservationRecorded(generationKey, writtenIndex, timestamp, observation.conservativeMark);
+    recorded = true;
   }
 
   /// @inheritdoc IDreamDexMarkOracle

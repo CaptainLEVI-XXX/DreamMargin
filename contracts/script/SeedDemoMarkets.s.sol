@@ -11,13 +11,21 @@ import {LibShannonSetup} from "script/LibShannonSetup.sol";
 
 import {IDreamMarginVault} from "src/interfaces/dreammargin/IDreamMarginVault.sol";
 import {IDreamDexBinaryPool} from "src/interfaces/integrations/IDreamDexBinaryPool.sol";
+import {IERC20Minimal} from "src/interfaces/integrations/IERC20Minimal.sol";
 import {IERC6909} from "src/interfaces/integrations/IERC6909.sol";
 
 import {Script} from "forge-std/Script.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 
 // The script intentionally validates the live expiry before placing persistent demo orders.
-// forge-lint: disable-start(block-timestamp, unused-return)
+// forge-lint: disable-start(block-timestamp, unused-return, calls-loop)
+
+/// @notice Shannon test collateral faucet used only to provision the public demo.
+interface ISeedTestUsdc {
+  /// @notice Mints bounded test-only collateral to the caller.
+  /// @param amount Raw six-decimal tUSDC amount, capped per call.
+  function faucet(uint256 amount) external;
+}
 
 /// @notice Broadcasts the one-time liquidity setup for the dedicated DreamMargin markets.
 contract SeedDemoMarkets is Script {
@@ -27,8 +35,9 @@ contract SeedDemoMarkets is Script {
   string private constant _OUTPUT = "deployments/shannon-demo-liquidity.json";
   uint256 private constant _MINIMUM_INTERVAL = 31 days;
   uint256 private constant _MINIMUM_HEADROOM = 31 days;
-  uint256 private constant _VAULT_TARGET = 500 * LibShannonSetup.UNIT;
-  uint256 private constant _BOOK_QUANTITY = 200 * LibShannonSetup.UNIT;
+  uint256 private constant _VAULT_TARGET = 50_000 * LibShannonSetup.UNIT;
+  uint256 private constant _BOOK_QUANTITY = 50_000 * LibShannonSetup.UNIT;
+  uint256 private constant _FAUCET_CHUNK = 10_000 * LibShannonSetup.UNIT;
   uint256 private constant _YES_BID = 450_000;
   uint256 private constant _YES_ASK = 550_000;
   uint8 private constant _SELL_YES = 1;
@@ -84,6 +93,19 @@ contract SeedDemoMarkets is Script {
     _writeManifest(deployment, btc, eth, btcSeed, ethSeed, depositedAssets);
   }
 
+  /// @notice Ensures the deployment account can fund one exact pending setup action.
+  /// @param owner Testnet account receiving any faucet shortfall.
+  /// @param required Minimum current collateral balance required.
+  function _ensureCollateral(address owner, uint256 required) private {
+    uint256 balance = IERC20Minimal(LibShannonSetup.TEST_USDC).balanceOf(owner);
+    while (balance < required) {
+      uint256 deficit = required - balance;
+      uint256 amount = deficit < _FAUCET_CHUNK ? deficit : _FAUCET_CHUNK;
+      ISeedTestUsdc(LibShannonSetup.TEST_USDC).faucet(amount);
+      balance = IERC20Minimal(LibShannonSetup.TEST_USDC).balanceOf(owner);
+    }
+  }
+
   /// @notice Raises immediately available ERC-4626 assets to the configured demo target.
   /// @param vaultAddress Deployed DreamMargin vault.
   /// @param receiver Account receiving any newly minted vault shares.
@@ -96,12 +118,13 @@ contract SeedDemoMarkets is Script {
     uint256 currentAssets = vault.totalAssets();
     if (currentAssets >= _VAULT_TARGET) return 0;
     depositedAssets = _VAULT_TARGET - currentAssets;
+    _ensureCollateral(receiver, depositedAssets);
     LibShannonSetup.TEST_USDC.safeApproveWithRetry(vaultAddress, depositedAssets);
     require(vault.deposit(depositedAssets, receiver) != 0, "EMPTY_VAULT_DEPOSIT");
     LibShannonSetup.TEST_USDC.safeApproveWithRetry(vaultAddress, 0);
   }
 
-  /// @notice Mints complete sets and places a 0.45 bid and 0.55 ask on one empty YES book.
+  /// @notice Tops one YES book up to durable 0.45 bid and 0.55 ask depth.
   /// @param live Validated long-lived DreamDEX generation.
   /// @param owner Account funding the inventory and owning the resting orders.
   /// @return result Pool-scoped order identifiers, or zeros when the book was already seeded.
@@ -112,28 +135,43 @@ contract SeedDemoMarkets is Script {
     IDreamDexBinaryPool pool = IDreamDexBinaryPool(live.pool);
     IDreamDexBinaryPool.BookLevel[] memory bids = pool.getBookLevels(true, 1);
     IDreamDexBinaryPool.BookLevel[] memory asks = pool.getBookLevels(false, 1);
-    if (bids.length != 0 || asks.length != 0) {
-      require(bids.length == 1 && asks.length == 1, "PARTIAL_BOOK");
-      return result;
-    }
-
-    LibShannonSetup.TEST_USDC.safeApproveWithRetry(live.pool, _BOOK_QUANTITY);
-    pool.mintSet(owner, owner, _BOOK_QUANTITY);
-    LibShannonSetup.TEST_USDC.safeApproveWithRetry(live.pool, 0);
+    uint256 bidDepth = bids.length == 0 ? 0 : bids[0].quantity;
+    uint256 askDepth = asks.length == 0 ? 0 : asks[0].quantity;
+    if (bids.length != 0) require(bids[0].price == _YES_BID, "UNEXPECTED_BID");
+    if (asks.length != 0) require(asks[0].price == _YES_ASK, "UNEXPECTED_ASK");
+    uint256 bidDeficit = bidDepth < _BOOK_QUANTITY ? _BOOK_QUANTITY - bidDepth : 0;
+    uint256 askDeficit = askDepth < _BOOK_QUANTITY ? _BOOK_QUANTITY - askDepth : 0;
+    if (bidDeficit == 0 && askDeficit == 0) return result;
 
     IERC6909 outcome = IERC6909(live.yesKey.outcomeToken);
-    require(outcome.approve(live.pool, live.yesKey.outcomeId, _BOOK_QUANTITY), "YES_APPROVAL");
-    require(outcome.approve(live.pool, live.noKey.outcomeId, _BOOK_QUANTITY), "NO_APPROVAL");
+    uint256 yesBalance = outcome.balanceOf(owner, live.yesKey.outcomeId);
+    uint256 noBalance = outcome.balanceOf(owner, live.noKey.outcomeId);
+    uint256 yesNeeded = yesBalance < askDeficit ? askDeficit - yesBalance : 0;
+    uint256 noNeeded = noBalance < bidDeficit ? bidDeficit - noBalance : 0;
+    uint256 mintAmount = yesNeeded > noNeeded ? yesNeeded : noNeeded;
+    if (mintAmount != 0) {
+      _ensureCollateral(owner, mintAmount);
+      LibShannonSetup.TEST_USDC.safeApproveWithRetry(live.pool, mintAmount);
+      pool.mintSet(owner, owner, mintAmount);
+      LibShannonSetup.TEST_USDC.safeApproveWithRetry(live.pool, 0);
+    }
     uint64 expiryNs = pool.marketExpiryNs();
-    (bool askAccepted, uint128 askId) = pool.placeBinaryOrder(
-      _SELL_YES, _YES_ASK, _BOOK_QUANTITY, expiryNs, _LIMIT_ORDER, 0, address(0), 0, 0
-    );
-    (bool bidAccepted, uint128 bidId) = pool.placeBinaryOrder(
-      _SELL_NO, _YES_BID, _BOOK_QUANTITY, expiryNs, _LIMIT_ORDER, 0, address(0), 0, 0
-    );
-    require(askAccepted && bidAccepted, "ORDER_REJECTED");
-    require(askId != 0 && bidId != 0, "ORDER_ID");
-    result = SeedResult({yesAskOrderId: askId, yesBidOrderId: bidId});
+    if (askDeficit != 0) {
+      require(outcome.approve(live.pool, live.yesKey.outcomeId, askDeficit), "YES_APPROVAL");
+      (bool accepted, uint128 orderId) = pool.placeBinaryOrder(
+        _SELL_YES, _YES_ASK, askDeficit, expiryNs, _LIMIT_ORDER, 0, address(0), 0, 0
+      );
+      require(accepted && orderId != 0, "ASK_REJECTED");
+      result.yesAskOrderId = orderId;
+    }
+    if (bidDeficit != 0) {
+      require(outcome.approve(live.pool, live.noKey.outcomeId, bidDeficit), "NO_APPROVAL");
+      (bool accepted, uint128 orderId) = pool.placeBinaryOrder(
+        _SELL_NO, _YES_BID, bidDeficit, expiryNs, _LIMIT_ORDER, 0, address(0), 0, 0
+      );
+      require(accepted && orderId != 0, "BID_REJECTED");
+      result.yesBidOrderId = orderId;
+    }
   }
 
   /// @notice Writes the exact frontend liquidity and generation bindings.
@@ -185,4 +223,4 @@ contract SeedDemoMarkets is Script {
   }
 }
 
-// forge-lint: disable-end(block-timestamp, unused-return)
+// forge-lint: disable-end(block-timestamp, unused-return, calls-loop)

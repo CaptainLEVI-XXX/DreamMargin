@@ -21,8 +21,10 @@ COLLATERAL="0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E"
 OUTCOME_TOKEN="0xB52c5934113Af5c0Bb20eb3C72290C8215f755b9"
 ACCOUNT="$(cast wallet address --private-key "$PRIVATE_KEY")"
 VAULT="$(jq -r '.vault' "$DEPLOYMENT")"
-VAULT_TARGET="${DEMO_VAULT_TARGET:-500000000}"
-BOOK_QUANTITY="${DEMO_BOOK_QUANTITY:-200000000}"
+VAULT_TARGET="${DEMO_VAULT_TARGET:-50000000000}"
+BOOK_QUANTITY="${DEMO_BOOK_QUANTITY:-50000000000}"
+ORACLE_DEPTH="${DEMO_ORACLE_DEPTH:-25000000000}"
+FAUCET_CHUNK="${DEMO_FAUCET_CHUNK:-10000000000}"
 YES_BID="${DEMO_YES_BID:-450000}"
 YES_ASK="${DEMO_YES_ASK:-550000}"
 MINIMUM_HEADROOM="${DEMO_MIN_LIFETIME_SECONDS:-2678400}"
@@ -65,10 +67,26 @@ uint_call() {
   printf '%s' "${output%% *}"
 }
 
+ensure_collateral() {
+  local target="$1"
+  local balance deficit amount faucet_tx
+  balance="$(uint_call "$COLLATERAL" 'balanceOf(address)(uint256)' "$ACCOUNT")"
+  while (( balance < target )); do
+    deficit="$((target - balance))"
+    amount="$deficit"
+    if (( amount > FAUCET_CHUNK )); then
+      amount="$FAUCET_CHUNK"
+    fi
+    send_checked faucet_tx "Demo tUSDC faucet" "$COLLATERAL" 'faucet(uint256)' "$amount"
+    balance="$(uint_call "$COLLATERAL" 'balanceOf(address)(uint256)' "$ACCOUNT")"
+  done
+}
+
 seed_market() {
   local symbol="$1"
   local market_id="$2"
-  local record pool yes_id no_id expiry expiry_ns bids asks yes_balance no_balance
+  local record pool yes_id no_id expiry expiry_ns bids asks bid_depth ask_depth
+  local bid_deficit ask_deficit yes_balance no_balance yes_needed no_needed mint_amount
   local collateral_approve_tx mint_tx yes_approve_tx no_approve_tx ask_tx bid_tx
   record="$(market_record "$market_id")"
   pool="$(jq -r '.[9]' <<<"$record")"
@@ -81,36 +99,73 @@ seed_market() {
   fi
   bids="$(book "$pool" true)"
   asks="$(book "$pool" false)"
-  if (( $(jq -r '.[0] | length' <<<"$bids") != 0 || $(jq -r '.[0] | length' <<<"$asks") != 0 )); then
-    if (( $(jq -r '.[0] | length' <<<"$bids") == 0 || $(jq -r '.[0] | length' <<<"$asks") == 0 )); then
-      echo "$symbol has a partially seeded book; refusing to guess at corrective orders." >&2
+  bid_depth=0
+  ask_depth=0
+  if (( $(jq -r '.[0] | length' <<<"$bids") != 0 )); then
+    if (( $(jq -r '.[0][0][0]' <<<"$bids") != YES_BID )); then
+      echo "$symbol best bid is not the configured demo price." >&2
       exit 1
     fi
-    echo "$symbol book is already two-sided; leaving it unchanged."
+    bid_depth="$(jq -r '.[0][0][1]' <<<"$bids")"
+  fi
+  if (( $(jq -r '.[0] | length' <<<"$asks") != 0 )); then
+    if (( $(jq -r '.[0][0][0]' <<<"$asks") != YES_ASK )); then
+      echo "$symbol best ask is not the configured demo price." >&2
+      exit 1
+    fi
+    ask_depth="$(jq -r '.[0][0][1]' <<<"$asks")"
+  fi
+  bid_deficit=0
+  ask_deficit=0
+  if (( bid_depth < BOOK_QUANTITY )); then
+    bid_deficit="$((BOOK_QUANTITY - bid_depth))"
+  fi
+  if (( ask_depth < BOOK_QUANTITY )); then
+    ask_deficit="$((BOOK_QUANTITY - ask_depth))"
+  fi
+  if (( bid_deficit == 0 && ask_deficit == 0 )); then
+    echo "$symbol book already meets the configured depth."
     return
   fi
 
   expiry_ns="$(uint_call "$pool" 'marketExpiryNs()(uint64)')"
   yes_balance="$(uint_call "$OUTCOME_TOKEN" 'balanceOf(address,uint256)(uint256)' "$ACCOUNT" "$yes_id")"
   no_balance="$(uint_call "$OUTCOME_TOKEN" 'balanceOf(address,uint256)(uint256)' "$ACCOUNT" "$no_id")"
-  if (( yes_balance < BOOK_QUANTITY || no_balance < BOOK_QUANTITY )); then
+  yes_needed=0
+  no_needed=0
+  if (( yes_balance < ask_deficit )); then
+    yes_needed="$((ask_deficit - yes_balance))"
+  fi
+  if (( no_balance < bid_deficit )); then
+    no_needed="$((bid_deficit - no_balance))"
+  fi
+  mint_amount="$yes_needed"
+  if (( no_needed > mint_amount )); then
+    mint_amount="$no_needed"
+  fi
+  if (( mint_amount != 0 )); then
+    ensure_collateral "$mint_amount"
     send_checked collateral_approve_tx "$symbol collateral approval" "$COLLATERAL" \
-      'approve(address,uint256)(bool)' "$pool" "$BOOK_QUANTITY"
+      'approve(address,uint256)(bool)' "$pool" "$mint_amount"
     send_checked mint_tx "$symbol complete-set mint" "$pool" \
-      'mintSet(address,address,uint256)' "$ACCOUNT" "$ACCOUNT" "$BOOK_QUANTITY"
+      'mintSet(address,address,uint256)' "$ACCOUNT" "$ACCOUNT" "$mint_amount"
   else
     echo "$symbol complete-set inventory is already available; reusing it."
   fi
-  send_checked yes_approve_tx "$symbol YES approval" "$OUTCOME_TOKEN" \
-    'approve(address,uint256,uint256)(bool)' "$pool" "$yes_id" "$BOOK_QUANTITY"
-  send_checked no_approve_tx "$symbol NO approval" "$OUTCOME_TOKEN" \
-    'approve(address,uint256,uint256)(bool)' "$pool" "$no_id" "$BOOK_QUANTITY"
-  send_checked ask_tx "$symbol 0.55 YES ask" "$pool" "$ORDER_SIGNATURE" \
-    1 "$YES_ASK" "$BOOK_QUANTITY" "$expiry_ns" 0 0 \
-    0x0000000000000000000000000000000000000000 0 0
-  send_checked bid_tx "$symbol 0.45 YES bid" "$pool" "$ORDER_SIGNATURE" \
-    3 "$YES_BID" "$BOOK_QUANTITY" "$expiry_ns" 0 0 \
-    0x0000000000000000000000000000000000000000 0 0
+  if (( ask_deficit != 0 )); then
+    send_checked yes_approve_tx "$symbol YES approval" "$OUTCOME_TOKEN" \
+      'approve(address,uint256,uint256)(bool)' "$pool" "$yes_id" "$ask_deficit"
+    send_checked ask_tx "$symbol 0.55 YES ask" "$pool" "$ORDER_SIGNATURE" \
+      1 "$YES_ASK" "$ask_deficit" "$expiry_ns" 0 0 \
+      0x0000000000000000000000000000000000000000 0 0
+  fi
+  if (( bid_deficit != 0 )); then
+    send_checked no_approve_tx "$symbol NO approval" "$OUTCOME_TOKEN" \
+      'approve(address,uint256,uint256)(bool)' "$pool" "$no_id" "$bid_deficit"
+    send_checked bid_tx "$symbol 0.45 YES bid" "$pool" "$ORDER_SIGNATURE" \
+      3 "$YES_BID" "$bid_deficit" "$expiry_ns" 0 0 \
+      0x0000000000000000000000000000000000000000 0 0
+  fi
 }
 
 if [[ "$(printf '%s' "$ACCOUNT" | tr '[:upper:]' '[:lower:]')" != \
@@ -123,6 +178,7 @@ vault_assets="$(uint_call "$VAULT" 'totalAssets()(uint256)')"
 deposit_tx="not-required"
 if (( vault_assets < VAULT_TARGET )); then
   deposit_amount="$((VAULT_TARGET - vault_assets))"
+  ensure_collateral "$deposit_amount"
   send_checked vault_approve_tx "Vault collateral approval" "$COLLATERAL" \
     'approve(address,uint256)(bool)' "$VAULT" "$deposit_amount"
   send_checked deposit_tx "DreamMargin vault funding" "$VAULT" \
@@ -149,8 +205,8 @@ for depth in \
   "$(jq -r '.[0][0][1]' <<<"$btc_ask")" \
   "$(jq -r '.[0][0][1]' <<<"$eth_bid")" \
   "$(jq -r '.[0][0][1]' <<<"$eth_ask")"; do
-  if (( depth < 20000000 )); then
-    echo "A seeded book side is below DreamMargin's 20-share oracle depth." >&2
+  if (( depth < ORACLE_DEPTH )); then
+    echo "A seeded book side is below DreamMargin's configured oracle depth." >&2
     exit 1
   fi
 done
