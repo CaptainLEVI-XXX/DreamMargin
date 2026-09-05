@@ -93,6 +93,11 @@ case "$MODE" in
   schedule) schedule ;;
   execute) execute ;;
   observe) observe ;;
+  maintain)
+    discover
+    execute
+    observe
+    ;;
   smoke) smoke ;;
   verify) "$SCRIPT_DIR/verify-shannon.sh" ;;
   all)
@@ -114,7 +119,7 @@ case "$MODE" in
     fi
     ;;
   *)
-    echo "Usage: $0 {all|plan|discover|deploy|schedule|execute|observe|smoke|verify}" >&2
+    echo "Usage: $0 {all|plan|discover|deploy|schedule|execute|observe|maintain|smoke|verify}" >&2
     exit 1
     ;;
 esac

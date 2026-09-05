@@ -1,0 +1,71 @@
+{
+  "schema": "dreammargin.frontend-deployment.v1",
+  "network": {
+    "name": "Somnia Shannon",
+    "chainId": 50312,
+    "nativeCurrency": "STT",
+    "rpcUrl": "https://dream-rpc.somnia.network",
+    "explorerUrl": "https://shannon-explorer.somnia.network"
+  },
+  "dreamMargin": {
+    "controller": "0xc141ba0c4f7bFAa72628f6Ea28F6e0118F154fe3",
+    "vault": "0x97cE780455c04398c6b4b079Dbb3F434619F8027",
+    "oracle": "0x979ADc628D88fb0499F0108C0968433B48b9259C",
+    "reactiveObserver": "0x117189C8ab4c6Aeb07Cc2c863c724A154ECBb1A5",
+    "seriesPolicyId": "0x8a2256ecf5f0225a38c67e560c1157ab952e4a72f46da40fcb7196373bd0ea7c",
+    "maxLeverageBps": 20000,
+    "maxPositionPageSize": 100,
+    "openingCutoffSeconds": 1200,
+    "oracleMinAgeSeconds": 60,
+    "oracleUpdateIntervalSeconds": 30,
+    "oracleStaleAfterSeconds": 600
+  },
+  "dreamDex": {
+    "core": "0x2802504314685D89bF6C992CA5a8e7cC78bc0294",
+    "binaryModule": "0x3ecC694Cef705358864a646142ac17A90E29e388",
+    "oracleHub": "0xe40db387cC98601Dd11bd634fF2f3AD5686dE32b",
+    "marketCreator": "0x44284bce155056B19b912e07c38eE859b632caA1",
+    "operatorId": 15,
+    "venueId": "0x09567c41c2b819e512ebbfc896a7d795b901b9f15f7637726d97561d5276acb0",
+    "collateral": "0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E",
+    "collateralSymbol": "tUSDC",
+    "collateralDecimals": 6,
+    "outcomeToken": "0xB52c5934113Af5c0Bb20eb3C72290C8215f755b9"
+  },
+  "markets": [
+    {
+      "symbol": "BTC",
+      "marketId": "0x0000000000000000000000000000000000000000000000000000000000013b54",
+      "oracleQuestionId": "50815",
+      "market": "0x8Ed1Eb342adFf420d30ee000492746bdc09fB927",
+      "pool": "0x36c22823B8C08b6546c5De439aa941EA73aA9b5a",
+      "marketNonce": 1,
+      "yesId": "1476284217057947301316217726535737061022363815369631198127616553910528",
+      "noId": "1476284217057947301316217726535737061022363815369631198127616553910529",
+      "yesGenerationKey": "0x26d84ba32cf58cf15aeb7904cd8b120eef92824bd9aa363d091fe3b68ad81ebd",
+      "noGenerationKey": "0x80fc98b1d401834441347604ee42bc028554b6414119f3f799d77c59a6979224",
+      "tradingStart": 1788563732,
+      "expiry": 1792368000,
+      "settlementWindowSeconds": 86400,
+      "resolutionReserveWei": "200000000000000000",
+      "reactivitySubscriptionId": 16076670
+    },
+    {
+      "symbol": "ETH",
+      "marketId": "0x0000000000000000000000000000000000000000000000000000000000013b55",
+      "oracleQuestionId": "50817",
+      "market": "0x161c6198c44D24E2D78A6dEf37Af9B5106AdEd98",
+      "pool": "0xC5Fa5aA238977bcC7C05290De2F1714b11559027",
+      "marketNonce": 1,
+      "yesId": "5337474850877550297290828291937645639666702779093185437515453097312512",
+      "noId": "5337474850877550297290828291937645639666702779093185437515453097312513",
+      "yesGenerationKey": "0x35f65a6bf318a5cb403b467e397fab9a0f2d3a0239551e466ec4f39050a9abdf",
+      "noGenerationKey": "0xa728121e5141ee0c2a66e15da13f3bbcf73b63c3112ce60ea997c0093a93e82e",
+      "tradingStart": 1788563738,
+      "expiry": 1792368000,
+      "settlementWindowSeconds": 86400,
+      "resolutionReserveWei": "200000000000000000",
+      "reactivitySubscriptionId": 16076681
+    }
+  ]
+}

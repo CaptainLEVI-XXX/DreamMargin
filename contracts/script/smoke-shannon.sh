@@ -5,9 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTRACTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$CONTRACTS_DIR/.env}"
 DEPLOYMENT="$CONTRACTS_DIR/deployments/shannon-deployment.json"
-SELECTION="$CONTRACTS_DIR/deployments/shannon-selected-markets.json"
-CONFIGURATION="$CONTRACTS_DIR/deployments/shannon-market-configuration.json"
-OUTPUT="$CONTRACTS_DIR/deployments/shannon-smoke.json"
+SELECTION="${SELECTION:-$CONTRACTS_DIR/deployments/shannon-selected-markets.json}"
+CONFIGURATION="${CONFIGURATION:-$CONTRACTS_DIR/deployments/shannon-market-configuration.json}"
+OUTPUT="${SMOKE_OUTPUT:-$CONTRACTS_DIR/deployments/shannon-smoke.json}"
 
 set -a
 # shellcheck disable=SC1090

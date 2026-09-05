@@ -110,6 +110,10 @@ library LibShannonSetup {
   /// @param market Per-window market contract.
   /// @param pool Current pool binding.
   /// @param nonce Current recyclable-pool generation nonce.
+  /// @param creator Market creator that rolled the generation.
+  /// @param originVenueId Originating DreamDEX venue identifier.
+  /// @param originOperatorId Originating DreamDEX operator identifier.
+  /// @param tradingStart Trading-start timestamp in seconds.
   /// @param expiry Trading-expiry timestamp in seconds.
   /// @param yesKey Exact DreamMargin YES generation tuple.
   /// @param noKey Exact DreamMargin NO generation tuple.
@@ -121,6 +125,10 @@ library LibShannonSetup {
     address market;
     address pool;
     uint64 nonce;
+    address creator;
+    bytes32 originVenueId;
+    uint32 originOperatorId;
+    uint64 tradingStart;
     uint64 expiry;
     MarketKey yesKey;
     MarketKey noKey;
@@ -172,12 +180,30 @@ library LibShannonSetup {
     view
     returns (LiveMarket memory live)
   {
+    live = loadSeriesMarket(marketId, expectedVenueId, minimumHeadroom, DAILY_INTERVAL, true);
+    require(uint256(live.expiry) - live.tradingStart == DAILY_INTERVAL, "NOT_DAILY");
+  }
+
+  /// @notice Validates one long-lived current generation, optionally before its book is seeded.
+  /// @param marketId Module-scoped DreamDEX market identifier.
+  /// @param expectedVenueId Required DreamDEX venue identifier.
+  /// @param minimumHeadroom Minimum seconds that must remain before expiry.
+  /// @param minimumInterval Minimum complete trading interval in seconds.
+  /// @param requireDepth Whether both book sides must already cover the oracle depth.
+  /// @return live Validated market and both exact outcome-generation keys.
+  function loadSeriesMarket(
+    bytes32 marketId,
+    bytes32 expectedVenueId,
+    uint256 minimumHeadroom,
+    uint256 minimumInterval,
+    bool requireDepth
+  ) internal view returns (LiveMarket memory live) {
     ModuleMarket memory record = _marketRecord(marketId);
     require(record.originVenueId == expectedVenueId, "WRONG_VENUE");
     require(record.outcomeSlotCount == 2, "NOT_BINARY");
     require(record.collateral == TEST_USDC, "WRONG_COLLATERAL");
     require(record.expiry > record.tradingStart, "INVALID_WINDOW");
-    require(uint256(record.expiry) - record.tradingStart == DAILY_INTERVAL, "NOT_DAILY");
+    require(uint256(record.expiry) - record.tradingStart >= minimumInterval, "INTERVAL_TOO_SHORT");
     require(uint256(record.expiry) > block.timestamp + minimumHeadroom, "INSUFFICIENT_HEADROOM");
     require(record.market.code.length != 0 && record.pool.code.length != 0, "MISSING_MARKET_CODE");
     require(IDreamDexBinaryMarket(record.market).status() == 1, "MARKET_NOT_TRADING");
@@ -199,10 +225,16 @@ library LibShannonSetup {
     require(book.tickSize != 0 && book.lotSize != 0 && book.minQuantity != 0, "INVALID_GRID");
     IDreamDexBinaryPool.BookLevel[] memory bids = pool.getBookLevels(true, 1);
     IDreamDexBinaryPool.BookLevel[] memory asks = pool.getBookLevels(false, 1);
-    require(bids.length == 1 && asks.length == 1, "EMPTY_BOOK");
-    require(bids[0].price != 0 && bids[0].price < asks[0].price, "INVALID_BOOK");
-    require(asks[0].price < UNIT, "INVALID_ASK");
-    require(bids[0].quantity >= 20 * UNIT && asks[0].quantity >= 20 * UNIT, "SHALLOW_BOOK");
+    IDreamDexBinaryPool.BookLevel memory bestBid;
+    IDreamDexBinaryPool.BookLevel memory bestAsk;
+    if (bids.length != 0) bestBid = bids[0];
+    if (asks.length != 0) bestAsk = asks[0];
+    if (requireDepth) {
+      require(bids.length == 1 && asks.length == 1, "EMPTY_BOOK");
+      require(bestBid.price != 0 && bestBid.price < bestAsk.price, "INVALID_BOOK");
+      require(bestAsk.price < UNIT, "INVALID_ASK");
+      require(bestBid.quantity >= 20 * UNIT && bestAsk.quantity >= 20 * UNIT, "SHALLOW_BOOK");
+    }
 
     MarketKey memory yesKey = MarketKey({
       marketId: marketId,
@@ -225,12 +257,16 @@ library LibShannonSetup {
       market: record.market,
       pool: record.pool,
       nonce: nonce,
+      creator: record.creator,
+      originVenueId: record.originVenueId,
+      originOperatorId: record.originOperatorId,
+      tradingStart: record.tradingStart,
       expiry: record.expiry,
       yesKey: yesKey,
       noKey: noKey,
       book: book,
-      bestBid: bids[0],
-      bestAsk: asks[0]
+      bestBid: bestBid,
+      bestAsk: bestAsk
     });
   }
 
