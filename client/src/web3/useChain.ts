@@ -7,7 +7,14 @@ import { readProtocol, readVault, type ProtocolSnapshot } from "./reads";
 import { controllerAbi } from "./abis/controllerAbi";
 import { oracleAbi } from "./abis/oracleAbi";
 import { vaultAbi } from "./abis/vaultAbi";
-import { connect, getInjected, readWallet, switchToShannon, type WalletState } from "./wallet";
+import {
+  connect,
+  disconnect,
+  getInjected,
+  readWallet,
+  switchToShannon,
+  type WalletState,
+} from "./wallet";
 
 /**
  * Live chain state for the shell.
@@ -51,7 +58,13 @@ export function useWallet() {
     setState(await readWallet(provider));
   }, []);
 
-  return { wallet: state, connect: doConnect, switchChain: doSwitch };
+  const doDisconnect = useCallback(async () => {
+    const provider = getInjected();
+    if (provider !== null) await disconnect(provider);
+    setState({ status: "disconnected" });
+  }, []);
+
+  return { wallet: state, connect: doConnect, switchChain: doSwitch, disconnect: doDisconnect };
 }
 
 export function useChain(account: string | null, refreshKey = 0): ChainStatus {

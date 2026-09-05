@@ -90,11 +90,11 @@ describe("safe actions survive degraded protocol modes", () => {
           account="0x1234567890abcdef1234567890abcdef12345678"
         />,
       );
-      expect(getByRole("button", { name: /buy .* at 1\.25x/i })).toBeDisabled();
+      expect(getByRole("button", { name: /buy .* first|open 1\.25x position/i })).toBeDisabled();
     },
   );
 
-  it("offers a permissionless recovery action when risk data is stale", () => {
+  it("keeps direct leverage available because the write refreshes stale risk data", () => {
     const s = SCENARIOS.staleOracle;
     const { getByRole } = render(
       <TradeView
@@ -106,6 +106,6 @@ describe("safe actions survive degraded protocol modes", () => {
         account="0x1234567890abcdef1234567890abcdef12345678"
       />,
     );
-    expect(getByRole("button", { name: /refresh risk data/i })).toBeEnabled();
+    expect(getByRole("button", { name: /open 1\.25x position/i })).toBeEnabled();
   });
 });

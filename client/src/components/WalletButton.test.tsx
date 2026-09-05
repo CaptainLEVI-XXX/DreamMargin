@@ -53,6 +53,24 @@ describe("WalletButton", () => {
     expect(screen.getByText("Shannon")).toBeVisible();
   });
 
+  it("puts disconnect in the connected-wallet menu", async () => {
+    const onDisconnect = vi.fn();
+    render(
+      <WalletButton
+        state={{ status: "connected", account: ACCOUNT, chainId: 50312, wrongChain: false }}
+        onConnect={noop}
+        onSwitchChain={noop}
+        onDisconnect={onDisconnect}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /0x1234…5678/i }));
+    expect(screen.getByText("Network").parentElement).toHaveTextContent("Shannon");
+    expect(screen.queryByText(/tUSDC/i)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("menuitem", { name: /disconnect/i }));
+    expect(onDisconnect).toHaveBeenCalledTimes(1);
+  });
+
   it("never fills violet, leaving that for the page's primary action", () => {
     const { container } = render(
       <WalletButton state={{ status: "disconnected" }} onConnect={noop} onSwitchChain={noop} />,

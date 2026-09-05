@@ -1,204 +1,342 @@
-.dm-markets h1 {
+.dm-markets-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: calc(var(--dm-space) * 4);
+  margin-bottom: calc(var(--dm-space) * 3);
+}
+
+.dm-eyebrow {
   margin-bottom: var(--dm-space);
+  color: var(--dm-muted);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .dm-markets-lede {
-  font-size: var(--dm-size-13);
+  margin-top: calc(var(--dm-space) * 1.25);
   color: var(--dm-text);
-  margin-bottom: var(--dm-page-space);
-}
-
-/* A scanning surface: hairline rows on the ground, no card chrome. §18.1
-   Fixed layout so a ticking countdown cannot resize the columns beside it. */
-.dm-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
   font-size: var(--dm-size-13);
 }
 
-.dm-col-market {
-  width: auto;
-}
-.dm-col-narrow {
-  width: 5.5rem;
-}
-.dm-col-time {
-  width: 7rem;
-}
-.dm-col-price {
-  width: 5rem;
-}
-.dm-col-spark {
-  width: 6rem;
-}
-.dm-col-tag {
-  width: 7rem;
-}
-.dm-col-hold {
-  width: 6rem;
-}
-.dm-col-action {
-  width: 5.5rem;
-}
-
-.dm-table th,
-.dm-table td {
-  text-align: left;
-  padding: calc(var(--dm-space) * 1.25) var(--dm-space);
-  border-bottom: 1px solid var(--dm-divider);
-  vertical-align: middle;
+.dm-market-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dm-space);
+  color: var(--dm-text);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
   white-space: nowrap;
+}
+
+.dm-market-count > span {
+  width: 6px;
+  height: 6px;
+  background: var(--dm-up);
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dm-up) 12%, transparent);
+}
+
+.dm-market-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--dm-space) * 2);
+  max-width: 1180px;
+}
+
+.dm-market-card {
+  position: relative;
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* One treatment for the whole header row: every cell holds the same element. */
-.dm-table thead th {
-  border-bottom: 1px solid var(--dm-line);
-  padding-top: 0;
-  font-weight: 400;
-}
-
-.dm-table thead button,
-.dm-table thead span {
-  display: inline-block;
-  background: none;
-  border: none;
-  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: calc(var(--dm-space) * 2.25);
+  border: 1px solid var(--dm-line);
+  border-radius: var(--dm-radius-large);
+  background: var(--dm-panel);
   color: var(--dm-text);
-  font-family: var(--dm-font-mono);
-  font-size: var(--dm-size-11);
-  letter-spacing: 0;
-}
-
-.dm-table thead button {
+  text-align: left;
   cursor: pointer;
+  transition:
+    border-color var(--dm-transition),
+    background var(--dm-transition),
+    transform var(--dm-transition);
 }
 
-.dm-table thead button:hover {
-  color: var(--dm-ink);
+.dm-market-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: var(--dm-accent);
+  opacity: 0;
+  transition: opacity var(--dm-transition);
 }
 
-.dm-table thead button[data-active] {
-  color: var(--dm-ink);
+.dm-market-card:hover {
+  border-color: #45433f;
+  background: var(--dm-panel-raised);
+  transform: translateY(-2px);
 }
 
-.dm-table tbody tr:hover {
-  background: var(--dm-surface);
+.dm-market-card:hover::before,
+.dm-market-card:focus-visible::before {
+  opacity: 1;
 }
 
-/* Numbers align on their right edge; tabular figures keep digits in column. */
-.dm-table .dm-num,
-.dm-table thead th.dm-num span,
-.dm-table thead th.dm-num button {
-  text-align: right;
+.dm-market-card-top,
+.dm-market-prices,
+.dm-market-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--dm-space) * 2);
 }
 
-.dm-table td.dm-num {
-  text-align: right;
-}
-
-.dm-row-asset {
+.dm-market-symbol {
   display: block;
   color: var(--dm-ink);
   font-family: var(--dm-font-mono);
-  line-height: 1.3;
+  font-size: var(--dm-size-17);
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
-.dm-row-question {
+.dm-market-interval {
   display: block;
-  color: var(--dm-text);
+  margin-top: 2px;
+  color: var(--dm-muted);
+  font-family: var(--dm-font-mono);
   font-size: var(--dm-size-11);
-  font-weight: 400;
-  line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.dm-countdown {
+.dm-market-question {
+  display: block;
+  min-height: 2.5em;
+  max-width: 30ch;
+  margin-top: calc(var(--dm-space) * 1.5);
+  color: var(--dm-ink-soft);
+  font-family: var(--dm-font-brand);
+  font-size: var(--dm-size-17);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.dm-market-graph {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 116px;
+  margin: calc(var(--dm-space) * 1.5) calc(var(--dm-space) * -2.25) 0;
+  padding: calc(var(--dm-space) * 2.5) calc(var(--dm-space) * 2.25) 4px;
+  overflow: hidden;
+  border-top: 1px solid var(--dm-divider);
+  border-bottom: 1px solid var(--dm-divider);
+  background-image:
+    linear-gradient(var(--dm-divider) 1px, transparent 1px),
+    linear-gradient(90deg, var(--dm-divider) 1px, transparent 1px);
+  background-color: color-mix(in srgb, var(--dm-ground) 72%, var(--dm-panel));
+  background-size:
+    100% 29px,
+    72px 100%;
+}
+
+.dm-market-graph-label {
+  position: absolute;
+  top: var(--dm-space);
+  left: calc(var(--dm-space) * 2.25);
+  color: var(--dm-muted);
+  font-family: var(--dm-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dm-market-graph .dm-spark {
+  width: 100%;
+  height: 88px;
+  overflow: visible;
+}
+
+.dm-market-graph .dm-spark-line {
+  stroke: var(--dm-down);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, currentColor 28%, transparent));
+}
+
+.dm-market-graph .dm-spark[data-up="true"] .dm-spark-line {
+  stroke: var(--dm-up);
+}
+
+.dm-market-graph .dm-spark-area {
+  stroke: none;
+  fill: color-mix(in srgb, var(--dm-down) 9%, transparent);
+}
+
+.dm-market-graph .dm-spark[data-up="true"] .dm-spark-area {
+  fill: color-mix(in srgb, var(--dm-up) 9%, transparent);
+}
+
+.dm-market-graph .dm-spark-dot {
+  fill: var(--dm-down);
+}
+
+.dm-market-graph .dm-spark[data-up="true"] .dm-spark-dot {
+  fill: var(--dm-up);
+}
+
+.dm-market-graph .dm-spark-empty {
+  width: 100%;
+  color: var(--dm-muted);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  text-align: center;
+}
+
+.dm-market-graph-loading {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: var(--dm-space);
+  color: var(--dm-muted);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+}
+
+.dm-market-graph-loading > span {
+  width: 42px;
+  height: 1px;
+  overflow: hidden;
+  background: linear-gradient(90deg, var(--dm-line), var(--dm-accent), var(--dm-line));
+  background-size: 200% 100%;
+  animation: dm-market-loading 1.4s linear infinite;
+}
+
+@keyframes dm-market-loading {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.dm-market-prices {
+  padding: calc(var(--dm-space) * 1.75) 0;
+}
+
+.dm-market-prices > span {
+  display: grid;
+  gap: 3px;
+}
+
+.dm-market-prices small {
+  color: var(--dm-muted);
+  font-family: var(--dm-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.dm-market-prices .dm-value,
+.dm-market-prices .dm-countdown {
   color: var(--dm-ink);
+  font-size: var(--dm-size-13);
+}
+
+.dm-market-closes {
+  margin-left: auto;
+  min-width: 138px;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--dm-line) 72%, transparent);
+  border-radius: var(--dm-radius);
+  background: color-mix(in srgb, var(--dm-panel-raised) 68%, var(--dm-ground));
+  text-align: right;
+}
+
+.dm-market-card-foot {
+  padding-top: calc(var(--dm-space) * 1.5);
+  border-top: 1px solid var(--dm-divider);
+  color: var(--dm-muted);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dm-market-graph-loading > span {
+    animation: none;
+  }
+}
+
+.dm-market-open {
+  color: var(--dm-ink-soft);
+  transition:
+    color var(--dm-transition),
+    transform var(--dm-transition);
+}
+
+.dm-market-card:hover .dm-market-open {
+  color: var(--dm-ink);
+  transform: translateX(2px);
 }
 
 .dm-tag {
   display: inline-block;
+  padding: 3px 7px;
+  border: 1px solid var(--dm-line);
+  color: var(--dm-text);
   font-family: var(--dm-font-mono);
   font-size: var(--dm-size-11);
-  color: var(--dm-text);
-  border: 1px solid var(--dm-line);
-  border-radius: var(--dm-radius);
-  padding: 2px 6px;
   line-height: 1.3;
 }
 
 .dm-tag[data-on] {
-  color: var(--dm-ink);
   border-color: var(--dm-accent);
   background: var(--dm-accent-tint);
-}
-
-.dm-row-action {
-  font-family: var(--dm-font-mono);
-  font-size: var(--dm-size-11);
-  background: transparent;
-  border: 1px solid var(--dm-line);
-  border-radius: var(--dm-radius);
   color: var(--dm-ink);
-  padding: 4px 10px;
-  cursor: pointer;
-  transition: border-color var(--dm-transition);
-}
-
-.dm-row-action:hover {
-  border-color: var(--dm-accent);
-}
-
-/* The sparkline is a block so it centres in the cell rather than sitting on
-   the text baseline. */
-.dm-cell-spark {
-  line-height: 0;
-}
-
-.dm-spark {
-  display: block;
-}
-
-.dm-spark path {
-  stroke: var(--dm-down);
-  stroke-width: 1.25;
-  vector-effect: non-scaling-stroke;
-}
-
-.dm-spark[data-up="true"] path {
-  stroke: var(--dm-up);
-}
-
-.dm-spark-empty {
-  color: var(--dm-text);
-}
-
-.dm-visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
-/* Below the two-column breakpoint the table scrolls rather than the page. §18.1 */
-@media (max-width: 1023px) {
-  .dm-markets {
-    overflow-x: auto;
-  }
 }
 
 .dm-empty-note {
-  font-size: var(--dm-size-13);
-  color: var(--dm-text);
-  border: 1px solid var(--dm-line);
-  border-radius: var(--dm-radius);
-  padding: calc(var(--dm-space) * 2);
-  margin-bottom: calc(var(--dm-space) * 2);
   max-width: none;
+  margin-bottom: calc(var(--dm-space) * 2);
+  padding: calc(var(--dm-space) * 2);
+  border: 1px solid var(--dm-line);
+  color: var(--dm-text);
+  font-size: var(--dm-size-13);
+}
+
+@media (max-width: 800px) {
+  .dm-market-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dm-markets-heading {
+    align-items: start;
+  }
+}
+
+@media (max-width: 520px) {
+  .dm-markets-heading {
+    display: block;
+  }
+
+  .dm-market-count {
+    margin-top: calc(var(--dm-space) * 2);
+  }
+
+  .dm-market-card {
+    padding: calc(var(--dm-space) * 2);
+  }
+
+  .dm-market-graph {
+    margin-right: calc(var(--dm-space) * -2);
+    margin-left: calc(var(--dm-space) * -2);
+    padding-right: calc(var(--dm-space) * 2);
+    padding-left: calc(var(--dm-space) * 2);
+  }
+
+  .dm-market-graph-label {
+    left: calc(var(--dm-space) * 2);
+  }
 }

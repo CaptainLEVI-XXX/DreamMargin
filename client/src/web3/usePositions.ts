@@ -89,8 +89,7 @@ export function usePositions(account: Address | null, markets: readonly MarketVi
             const outcomeIndex = (p.outcomeIndex === 0 ? 0 : 1) as 0 | 1;
             const price =
               outcomeIndex === 0 ? template.yesPrice : template.oneCollateral - template.yesPrice;
-            const mark =
-              outcomeIndex === 0 ? template.riskMark : template.oneCollateral - template.riskMark;
+            const mark = outcomeIndex === 0 ? template.riskMark : template.noRiskMark;
             const debtAssets = debts[i];
             const riskValue = (p.shares * mark) / template.oneCollateral;
             const maintenanceLtvBps = template.maintenanceLtvBps ?? 6_000n;

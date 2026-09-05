@@ -74,9 +74,10 @@ export function useMarkets(account: Address | null, refreshKey = 0): MarketsStat
 
         const markets = await Promise.all(
           verified.map(async ({ candidate, yes, no }): Promise<MarketView> => {
-            const [policy, oracle, book, balances] = await Promise.all([
+            const [policy, yesOracle, noOracle, book, balances] = await Promise.all([
               readPolicyEligibility(client, candidate.yesKey.marketId),
               readOracle(client, generationKey(candidate.yesKey), now),
+              readOracle(client, generationKey(candidate.noKey), now),
               readBinaryBook(client, candidate.yesKey.pool as Address, candidate.oneCollateral),
               account === null
                 ? Promise.resolve(EMPTY_BALANCES)
@@ -104,7 +105,10 @@ export function useMarkets(account: Address | null, refreshKey = 0): MarketsStat
               collateralDecimals: candidate.collateralDecimals,
               yesPrice: quoted.price,
               priceKnown: quoted.known,
-              riskMark: oracle.mark ?? quoted.price,
+              // Recovery marks are outcome-specific. A bid/ask spread means the
+              // NO mark is not the arithmetic complement of the YES mark.
+              riskMark: yesOracle.mark ?? book.yesBids[0]?.price ?? 0n,
+              noRiskMark: noOracle.mark ?? book.noBids[0]?.price ?? 0n,
               estimatedExitValue: book.yesBids[0]?.price ?? 0n,
               maxLeverageBps: eligible ? 20_000n : 10_000n,
               maintenanceLtvBps: yes.maintenanceLtvBps,
@@ -115,8 +119,15 @@ export function useMarkets(account: Address | null, refreshKey = 0): MarketsStat
               ownedNo: balances.no,
               yesAllowance: balances.yesAllowance,
               noAllowance: balances.noAllowance,
-              oracleUpdatedSecondsAgo: oracle.updatedSecondsAgo,
-              oracleStale: oracle.stale || oracle.mark === null,
+              oracleUpdatedSecondsAgo: Math.max(
+                yesOracle.updatedSecondsAgo,
+                noOracle.updatedSecondsAgo,
+              ),
+              oracleStale:
+                yesOracle.stale ||
+                noOracle.stale ||
+                yesOracle.mark === null ||
+                noOracle.mark === null,
               book,
             };
           }),

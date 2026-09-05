@@ -1418,6 +1418,25 @@ export const controllerAbi = [
   },
   {
     type: "function",
+    name: "maximumPositionShares",
+    inputs: [
+      {
+        name: "generationKey",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [
+      {
+        name: "shares",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "module",
     inputs: [],
     outputs: [
@@ -1428,6 +1447,114 @@ export const controllerAbi = [
       },
     ],
     stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "openFromCollateral",
+    inputs: [
+      {
+        name: "params",
+        type: "tuple",
+        internalType: "struct IDreamMarginController.OpenFromCollateralParams",
+        components: [
+          {
+            name: "key",
+            type: "tuple",
+            internalType: "struct MarketKey",
+            components: [
+              {
+                name: "marketId",
+                type: "bytes32",
+                internalType: "bytes32",
+              },
+              {
+                name: "pool",
+                type: "address",
+                internalType: "address",
+              },
+              {
+                name: "marketNonce",
+                type: "uint64",
+                internalType: "uint64",
+              },
+              {
+                name: "outcomeToken",
+                type: "address",
+                internalType: "address",
+              },
+              {
+                name: "outcomeId",
+                type: "uint256",
+                internalType: "uint256",
+              },
+              {
+                name: "collateral",
+                type: "address",
+                internalType: "address",
+              },
+            ],
+          },
+          {
+            name: "outcomeIndex",
+            type: "uint8",
+            internalType: "uint8",
+          },
+          {
+            name: "targetShares",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "leverageBps",
+            type: "uint32",
+            internalType: "uint32",
+          },
+          {
+            name: "maxUserCollateralIn",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "maxDebt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "limitPrice",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "deadline",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
+    ],
+    outputs: [
+      {
+        name: "positionId",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "userAssetsSpent",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "sharesBought",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "debtAssets",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "nonpayable",
   },
   {
     type: "function",
@@ -2386,6 +2513,31 @@ export const controllerAbi = [
       },
       {
         name: "shares",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "CollateralFundedPositionOpened",
+    inputs: [
+      {
+        name: "positionId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
+      },
+      {
+        name: "owner",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "userAssetsSpent",
         type: "uint256",
         indexed: false,
         internalType: "uint256",

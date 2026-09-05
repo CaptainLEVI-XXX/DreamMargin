@@ -94,6 +94,7 @@ describe("TransactionProgress", () => {
     ]);
     render(<TransactionProgress intent={intent} onReview={noop} onRetry={noop} />);
     expect(screen.getByText(/confirmed on somnia/i)).toBeVisible();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeVisible();
   });
 
   it("never opens a dialog, keeping progress in the initiating surface", () => {

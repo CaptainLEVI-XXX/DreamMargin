@@ -176,6 +176,10 @@ const TABLE: Record<string, { message: string; recovery: string }> = {
     message: "Your vault-share balance is lower than requested",
     recovery: "Reduce the amount",
   },
+  InsufficientBalance: {
+    message: "Your wallet balance is below the amount this transaction tried to spend",
+    recovery: "Refresh balances, then reduce the amount or acquire the missing shares",
+  },
   ZeroAmount: {
     message: "This action needs a non-zero amount",
     recovery: "Enter an amount",

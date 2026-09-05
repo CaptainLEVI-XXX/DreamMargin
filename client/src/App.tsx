@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AppShell, type Route } from "./components/AppShell";
+import { HeaderFunds } from "./components/HeaderFunds";
 import { ProtocolAlert } from "./components/ProtocolAlert";
 import { WalletButton } from "./components/WalletButton";
 import type { MarketView } from "./domain/models";
@@ -21,7 +22,7 @@ export default function App() {
   const [market, setMarket] = useState<MarketView | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const { wallet, connect, switchChain } = useWallet();
+  const { wallet, connect, switchChain, disconnect } = useWallet();
   const account = wallet.status === "connected" ? wallet.account : null;
   const discovered = useMarkets(account, refreshKey);
   const chain = useChain(account, refreshKey);
@@ -37,6 +38,7 @@ export default function App() {
     BTC: btc.kind === "ready" ? btc.series.points : [],
     ETH: eth.kind === "ready" ? eth.series.points : [],
   };
+  const sparkStates = { BTC: btc.kind, ETH: eth.kind } as const;
   const primary = liveMarkets[0] ?? fixture.markets[0];
   const selectedMarket =
     market === null
@@ -87,13 +89,20 @@ export default function App() {
         setMarket(null);
         setRoute(next);
       }}
+      utilities={
+        account === null ? null : (
+          <HeaderFunds
+            collateral={balances.collateral}
+            onFaucet={() => faucet.run(faucetIntent(1_000_000_000n))}
+          />
+        )
+      }
       wallet={
         <WalletButton
           state={wallet}
           onConnect={connect}
           onSwitchChain={switchChain}
-          collateral={account === null ? undefined : balances.collateral}
-          onFaucet={account === null ? undefined : () => faucet.run(faucetIntent(1_000_000_000n))}
+          onDisconnect={disconnect}
         />
       }
     >
@@ -113,6 +122,7 @@ export default function App() {
             loading={discovered.kind === "loading"}
             error={discovered.kind === "error" ? discovered.message : undefined}
             sparks={sparks}
+            sparkStates={sparkStates}
           />
         ) : (
           <TradeView

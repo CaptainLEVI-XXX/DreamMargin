@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   connect,
+  disconnect,
   readWallet,
   shortenAddress,
   switchToShannon,
@@ -81,6 +82,21 @@ describe("switchToShannon", () => {
       method: "wallet_switchEthereumChain",
       params: [{ chainId: "0xc488" }],
     });
+  });
+});
+
+describe("disconnect", () => {
+  it("asks the provider to revoke account access", async () => {
+    const p = provider({ wallet_revokePermissions: null });
+    await disconnect(p);
+    expect(p.request).toHaveBeenCalledWith({
+      method: "wallet_revokePermissions",
+      params: [{ eth_accounts: {} }],
+    });
+  });
+
+  it("allows local disconnection when revocation is unsupported", async () => {
+    await expect(disconnect(provider({}))).resolves.toBeUndefined();
   });
 });
 

@@ -1,12 +1,13 @@
 .dm-card {
-  background: transparent;
+  background: var(--dm-panel);
   border: 1px solid var(--dm-line);
-  border-radius: var(--dm-radius);
+  border-radius: var(--dm-radius-large);
   padding: calc(var(--dm-space) * 3);
 }
 
 .dm-card-title {
   margin-bottom: calc(var(--dm-space) * 2);
+  font-size: var(--dm-size-17);
 }
 
 /* Labels and monetary values are a single, repeatable two-column system.
@@ -44,14 +45,19 @@
 }
 
 .dm-button {
-  font-family: var(--dm-font-mono);
+  min-height: 44px;
+  font-family: var(--dm-font-brand);
   font-size: var(--dm-size-13);
+  font-weight: 600;
+  letter-spacing: -0.01em;
   border-radius: var(--dm-radius);
   padding: calc(var(--dm-space) * 1.5) calc(var(--dm-space) * 2);
   cursor: pointer;
   transition:
     background var(--dm-transition),
-    border-color var(--dm-transition);
+    border-color var(--dm-transition),
+    color var(--dm-transition),
+    transform var(--dm-transition);
 }
 
 .dm-button:disabled {
@@ -68,12 +74,18 @@
 .dm-button-primary:hover:not(:disabled) {
   background: var(--dm-accent-hover);
   border-color: var(--dm-accent-hover);
+  transform: translateY(-1px);
 }
 
 .dm-button-secondary {
-  background: transparent;
+  background: var(--dm-surface);
   border: 1px solid var(--dm-line);
   color: var(--dm-ink);
+}
+
+.dm-button-secondary:hover:not(:disabled) {
+  border-color: #4a4a50;
+  background: #141416;
 }
 
 .dm-button-tertiary {
@@ -82,6 +94,10 @@
   color: var(--dm-text);
   padding-left: 0;
   padding-right: 0;
+}
+
+.dm-button:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .dm-button-reason {

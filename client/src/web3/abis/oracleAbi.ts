@@ -410,6 +410,25 @@ export const oracleAbi = [
     stateMutability: "nonpayable",
   },
   {
+    type: "function",
+    name: "observeIfDue",
+    inputs: [
+      {
+        name: "generationKey",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [
+      {
+        name: "recorded",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "nonpayable",
+  },
+  {
     type: "event",
     name: "GenerationConfigured",
     inputs: [

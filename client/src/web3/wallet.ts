@@ -78,6 +78,21 @@ export async function switchToShannon(provider: Eip1193): Promise<void> {
   });
 }
 
+/**
+ * Revoke the site's account permission when the wallet implements EIP-2255.
+ * Providers without that method still disconnect the local application state.
+ */
+export async function disconnect(provider: Eip1193): Promise<void> {
+  try {
+    await provider.request({
+      method: "wallet_revokePermissions",
+      params: [{ eth_accounts: {} }],
+    });
+  } catch {
+    // Local disconnection remains useful for providers without permission revocation.
+  }
+}
+
 /** Shorten an address for the compact wallet button. §6.1 */
 export function shortenAddress(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;

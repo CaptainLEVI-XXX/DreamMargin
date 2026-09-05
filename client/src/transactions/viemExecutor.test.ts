@@ -19,6 +19,10 @@ describe("explainRevert", () => {
     expect(explainRevert({ data })).toMatch(/stale/i);
   });
 
+  it("decodes an integrated Solady token balance error", () => {
+    expect(explainRevert({ data: "0xf4d678b8" })).toMatch(/wallet balance/i);
+  });
+
   it("turns an ABI mismatch into a recovery action instead of viem internals", () => {
     expect(explainRevert(new Error('Function "openPosition" not found on ABI.'))).toBe(
       "The app could not prepare this transaction. Refresh the page to load the current contract interface.",

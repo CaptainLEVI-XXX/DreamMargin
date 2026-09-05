@@ -47,6 +47,9 @@ export const DEPLOYMENT = {
   outcomeToken: "${frontend.dreamDex.outcomeToken}",
   collateralDecimals: ${frontend.dreamDex.collateralDecimals},
   maxPositionPageSize: ${frontend.dreamMargin.maxPositionPageSize},
+  maximumPositionShares: ${frontend.dreamMargin.maximumPositionShares}n,
+  certifiedDepthShares: ${frontend.dreamMargin.certifiedDepthShares}n,
+  seededBookShares: ${frontend.dreamMargin.seededBookShares}n,
 } as const;
 
 /** Dedicated, long-lived DreamDEX generations supported by this client. */

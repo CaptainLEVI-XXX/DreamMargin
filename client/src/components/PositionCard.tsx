@@ -154,8 +154,13 @@ export function PositionCard({
                     sharesToSell: position.shares / 4n,
                     // Bounded by the conservative mark, not the visible price.
                     minCollateralOut:
-                      ((position.shares / 4n) * market.riskMark) / market.oneCollateral,
-                    limitPrice: market.riskMark,
+                      ((position.shares / 4n) *
+                        (position.outcomeIndex === 0 ? market.riskMark : market.noRiskMark)) /
+                      market.oneCollateral,
+                    limitPrice:
+                      position.outcomeIndex === 0
+                        ? market.riskMark
+                        : market.oneCollateral - market.noRiskMark,
                     deadlineSeconds: BigInt(Math.floor(Date.now() / 1000) + 60),
                     lotSize: 1_000n,
                   }),

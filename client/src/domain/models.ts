@@ -29,8 +29,10 @@ export type MarketView = {
    * it were real is worse than showing none.
    */
   priceKnown?: boolean;
-  /** Conservative protocol mark. Distinct from `yesPrice` per §4.5. */
+  /** Conservative YES recovery mark. Distinct from `yesPrice` per §4.5. */
   riskMark: bigint;
+  /** Conservative NO recovery mark; it is not necessarily `oneCollateral - riskMark`. */
+  noRiskMark: bigint;
   /** Size-aware executable exit value. Distinct again per §4.5. */
   estimatedExitValue: bigint;
   maxLeverageBps: bigint;

@@ -16,22 +16,25 @@ export function Sparkline({
   width?: number;
   height?: number;
 }) {
-  if (points.length < 2) return <span className="dm-spark-empty">—</span>;
+  if (points.length < 2) return <span className="dm-spark-empty">Price history unavailable</span>;
 
   const closes = points.map((p) => p.close);
   const min = closes.reduce((a, b) => (b < a ? b : a));
   const max = closes.reduce((a, b) => (b > a ? b : a));
   const range = max - min === 0n ? 1n : max - min;
 
-  const d = closes
-    .map((c, i) => {
-      const x = (i / (closes.length - 1)) * width;
-      // Fixed point before the single float conversion, so full-magnitude
-      // prices never pass through a float.
-      const y = height - (Number(((c - min) * 10_000n) / range) / 10_000) * height;
-      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-    })
+  const projected = closes.map((c, i) => {
+    const x = (i / (closes.length - 1)) * width;
+    // Fixed point before the single float conversion, so full-magnitude
+    // prices never pass through a float.
+    const y = height - (Number(((c - min) * 10_000n) / range) / 10_000) * height;
+    return { x, y };
+  });
+  const d = projected
+    .map(({ x, y }, i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`)
     .join(" ");
+  const area = `${d} L${width},${height} L0,${height} Z`;
+  const last = projected[projected.length - 1];
 
   const up = closes[closes.length - 1] >= closes[0];
 
@@ -44,7 +47,9 @@ export function Sparkline({
       data-up={up}
       aria-hidden="true"
     >
-      <path d={d} fill="none" />
+      <path className="dm-spark-area" d={area} />
+      <path className="dm-spark-line" d={d} fill="none" />
+      <circle className="dm-spark-dot" cx={last.x} cy={last.y} r="2.5" />
     </svg>
   );
 }

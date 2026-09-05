@@ -1,21 +1,33 @@
 .dm-tiers {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--dm-space);
-  flex-wrap: wrap;
+  padding: 5px;
+  border: 1px solid #2c2b27;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dm-ground) 74%, var(--dm-panel));
 }
 
 .dm-tier {
   font-family: var(--dm-font-mono);
   font-size: var(--dm-size-13);
-  border: 1px solid var(--dm-line);
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid transparent;
   border-radius: var(--dm-radius);
-  background: transparent;
+  background: var(--dm-panel-raised);
   color: var(--dm-text);
   padding: var(--dm-space) calc(var(--dm-space) * 1.5);
   cursor: pointer;
   transition:
     border-color var(--dm-transition),
     background var(--dm-transition);
+}
+
+.dm-tier:hover {
+  border-color: #45433f;
+  background: #1b1a16;
+  color: var(--dm-ink-soft);
 }
 
 /* Violet outline and tint, never a solid fill. §18.5 */

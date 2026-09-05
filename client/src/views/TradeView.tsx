@@ -11,13 +11,12 @@ import type { Resolution } from "../data/priceFeed";
 import { formatCents, formatUnits, parseUnitsStrict } from "../domain/amounts";
 import { planAcquisition, type BookLevel } from "../domain/bookQuote";
 import { defaultTier, formatMultiple, tiersFor } from "../domain/leverageTiers";
-import { generationKey } from "../domain/marketKey";
 import type { MarketView, ProtocolView, VaultView } from "../domain/models";
 import { availabilityFor, PositionStatus } from "../domain/protocol";
-import { observeIntent } from "../transactions/actions";
 import type { WalletCapabilities } from "../transactions/callPlan";
 import { planTrade } from "../transactions/tradePlan";
 import { useIntentRunner } from "../transactions/useIntentRunner";
+import { DEPLOYMENT } from "../config/deployment";
 import type { Balances } from "../web3/tokens";
 
 const BPS = 10_000n;
@@ -27,6 +26,11 @@ const CHART_RANGES: Record<ChartRange, { label: string; resolution: Resolution; 
   "10d": { label: "10D", resolution: "H1", limit: 240 },
   all: { label: "All", resolution: "D1", limit: 90 },
 };
+
+/** Build a short-lived venue deadline at the moment the user acts. */
+function nextTradeDeadline(): bigint {
+  return BigInt(Math.floor(Date.now() / 1000) + 60);
+}
 
 type Props = {
   market: MarketView;
@@ -44,12 +48,11 @@ type Props = {
 /**
  * The market page: chart on the left, one action panel on the right.
  *
- * The tier row is the action rather than a separate step. At 1x this buys the
- * outcome and stops; above 1x it buys and then opens an isolated position
- * against the shares. Those remain two transactions, because a DreamDEX fill
- * must confirm before DreamMargin can pull the shares, but the trader makes one
- * decision instead of navigating two screens. The confirmation count is stated
- * before the first prompt so the extra step is never hidden.
+ * The tier row chooses the economic action. At 1x the entered size is a normal
+ * outcome purchase. Above 1x the entered size is the exact final position:
+ * DreamMargin combines trader tUSDC with vault debt and buys the outcome in one
+ * controller action. The confirmation count always describes the current
+ * review stage.
  */
 export function TradeView({
   market,
@@ -82,10 +85,12 @@ export function TradeView({
 
   const owned = side === "yes" ? balances.yes : balances.no;
   const quantity = amount ?? 0n;
+  const leveraged = leverageBps > BPS;
+  const selectedLevels = side === "yes" ? book.asks : book.bids;
   const acquisition = planAcquisition({
     side,
-    levels: side === "yes" ? book.asks : book.bids,
-    quantity: quantity > owned ? quantity - owned : 0n,
+    levels: selectedLevels,
+    quantity: leveraged ? 0n : quantity,
     oneCollateral: market.oneCollateral,
     lotSize: 1_000n,
     allowMint: true,
@@ -106,6 +111,7 @@ export function TradeView({
           quantity,
           leverageBps,
           acquisition,
+          levels: selectedLevels,
           owned,
           collateralAllowance: balances.collateralAllowance,
           outcomeAllowance: side === "yes" ? balances.yesAllowance : balances.noAllowance,
@@ -122,17 +128,33 @@ export function TradeView({
   const availability = availabilityFor({
     mode: protocol.mode,
     status: PositionStatus.Active,
-    oracleStale: market.oracleStale,
+    // Leveraged writes refresh a due sample in the same transaction.
+    oracleStale: false,
     beforeOpeningCutoff: true,
     beforeReduceOnlyCutoff: true,
   });
 
-  const leveraged = leverageBps > BPS;
   const borrowed = sequence?.borrowed ?? 0n;
+  const financedShares = sequence?.financedShares ?? 0n;
+  const expectedExposure = leveraged ? financedShares : 0n;
+  const selectedRiskMark = side === "yes" ? market.riskMark : market.noRiskMark;
+  const maintenanceLtvBps = market.maintenanceLtvBps ?? 6_000n;
+  const expectedRiskValue = (expectedExposure * selectedRiskMark) / market.oneCollateral;
+  const expectedDebtCapacity = (expectedRiskValue * maintenanceLtvBps) / BPS;
+  const expectedBufferBps =
+    expectedDebtCapacity === 0n || borrowed >= expectedDebtCapacity
+      ? 0n
+      : ((expectedDebtCapacity - borrowed) * BPS) / expectedDebtCapacity;
+  const expectedLiquidationPrice =
+    expectedExposure === 0n || maintenanceLtvBps === 0n
+      ? 0n
+      : (borrowed * market.oneCollateral * BPS) / (expectedExposure * maintenanceLtvBps);
   // Borrowing draws on vault cash; without it the open reverts however many
   // shares are held, so it is surfaced here rather than at signing time.
   const vaultShort = leveraged && borrowed > vault.availableLiquidity;
-  const totalCost = acquisition.bookCost + acquisition.mintCost;
+  const totalCost = leveraged
+    ? (sequence?.maximumCost ?? 0n)
+    : acquisition.bookCost + acquisition.mintCost;
   const acquired = acquisition.fromBook + acquisition.fromMint;
   const effectivePrice = acquired === 0n ? null : (totalCost * market.oneCollateral) / acquired;
 
@@ -189,7 +211,7 @@ export function TradeView({
               </>
             )}
           </dd>
-          <dt>Risk mark</dt>
+          <dt>{side.toUpperCase()} risk mark</dt>
           <dd>
             {/* §4.5 keeps market price and risk mark distinct. A stale oracle
                 has no mark at all, so echoing the market price here would
@@ -197,7 +219,7 @@ export function TradeView({
             {market.oracleStale ? (
               <span className="dm-unknown">Unavailable while risk data is stale</span>
             ) : (
-              <Value>{formatCents(market.riskMark, market.oneCollateral)}</Value>
+              <Value>{formatCents(selectedRiskMark, market.oneCollateral)}</Value>
             )}
           </dd>
           <dt>You hold</dt>
@@ -208,7 +230,7 @@ export function TradeView({
         </dl>
       </div>
 
-      <Card>
+      <Card title="Open position">
         <div className="dm-side">
           <button
             type="button"
@@ -234,7 +256,7 @@ export function TradeView({
         </div>
 
         <label className="dm-field">
-          Shares
+          {leveraged ? "Position size in shares" : "Shares to buy"}
           <input
             aria-label="Shares"
             value={amountText}
@@ -243,43 +265,78 @@ export function TradeView({
           />
         </label>
 
+        <div className="dm-chart-range dm-share-presets" role="group" aria-label="Share presets">
+          {[100, 500, 1000].map((preset) => (
+            <button key={preset} type="button" onClick={() => setAmountText(String(preset))}>
+              {preset}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setAmountText(formatUnits(DEPLOYMENT.maximumPositionShares, d, 0))}
+          >
+            Max
+          </button>
+        </div>
+
         <LeverageTiers
           maxLeverageBps={market.maxLeverageBps}
           selected={leverageBps}
           onSelect={setLeverageBps}
         />
         <p className="dm-step-note">
-          {leveraged ? `Borrows to hold more than you pay for` : `Spot purchase, no borrowing`}
+          {leveraged
+            ? `Pay with tUSDC; DreamMargin adds vault credit and buys the ${side.toUpperCase()} shares in one transaction.`
+            : `A normal DreamDEX purchase with no borrowing.`}
         </p>
 
         <dl className="dm-market-facts dm-trade-summary">
-          <dt>Cost</dt>
-          <dd>
-            <Value>{formatUnits(acquisition.bookCost + acquisition.mintCost, d)} tUSDC</Value>
-          </dd>
           {leveraged ? (
             <>
-              <dt>Borrowed</dt>
+              <dt>Expected from wallet</dt>
               <dd>
-                <Value>{formatUnits(borrowed, d)} tUSDC</Value>
+                ≈ <Value>{formatUnits(sequence?.estimatedUserCollateral ?? 0n, d)} tUSDC</Value>
               </dd>
-              <dt>Position total</dt>
+              <dt>Authorized maximum</dt>
               <dd>
-                <Value>{formatUnits(sequence?.committed ?? 0n, d)}</Value> {side.toUpperCase()}
+                <Value>{formatUnits(sequence?.userCollateral ?? 0n, d)} tUSDC</Value>
+              </dd>
+              <dt>Vault credit</dt>
+              <dd>
+                ≈ <Value>{formatUnits(borrowed, d)} tUSDC</Value>
+              </dd>
+              <dt>Worst-case purchase cost</dt>
+              <dd>
+                <Value>{formatUnits(totalCost, d)} tUSDC</Value>
+              </dd>
+              <dt>Position exposure</dt>
+              <dd>
+                <Value>{formatUnits(expectedExposure, d)}</Value> {side.toUpperCase()}
               </dd>
             </>
-          ) : null}
-          <dt>Price paid</dt>
-          <dd>
-            {/* The effective price, which differs from the market price
-                whenever any part is minted: a complete set always costs one
-                whole unit however the book is priced. */}
-            {effectivePrice === null ? (
-              <span className="dm-unknown">—</span>
-            ) : (
-              <Value>{formatCents(effectivePrice, market.oneCollateral)}</Value>
-            )}
-          </dd>
+          ) : (
+            <>
+              <dt>Cost</dt>
+              <dd>
+                <Value>{formatUnits(totalCost, d)} tUSDC</Value>
+              </dd>
+              <dt>Shares bought</dt>
+              <dd>
+                <Value>{formatUnits(acquired, d)}</Value> {side.toUpperCase()}
+              </dd>
+              <dt>Average price</dt>
+              <dd>
+                {/* The effective price differs whenever minting is involved:
+                    a complete set costs one whole unit and also returns the
+                    opposite outcome. */}
+                {effectivePrice === null ? (
+                  <span className="dm-unknown">—</span>
+                ) : (
+                  <Value>{formatCents(effectivePrice, market.oneCollateral)}</Value>
+                )}
+              </dd>
+            </>
+          )}
         </dl>
 
         {acquisition.note === undefined ? null : (
@@ -288,8 +345,8 @@ export function TradeView({
 
         {leveraged ? (
           <SafetyBuffer
-            bufferBps={4_000n}
-            liquidationLabel={formatCents(market.riskMark / 2n, market.oneCollateral)}
+            bufferBps={expectedBufferBps}
+            liquidationLabel={formatCents(expectedLiquidationPrice, market.oneCollateral)}
             updatedSecondsAgo={market.oracleUpdatedSecondsAgo}
             stale={market.oracleStale}
           />
@@ -314,16 +371,7 @@ export function TradeView({
               : `${sequence.confirmations} wallet confirmations`}
         </p>
 
-        {intent === null && leveraged && market.oracleStale ? (
-          <Button
-            variant="primary"
-            disabled={account === null}
-            disabledReason={account === null ? "Connect a wallet to continue" : undefined}
-            onClick={() => run(observeIntent(generationKey(market.key)))}
-          >
-            Refresh risk data
-          </Button>
-        ) : intent === null ? (
+        {intent === null ? (
           <Button
             variant="primary"
             disabled={!canAct || (leveraged && blockedReason !== undefined)}
@@ -333,17 +381,20 @@ export function TradeView({
                 : (blockedReason ?? sequence?.blocked)
             }
             onClick={() => {
-              const fresh = buildSequence(BigInt(Math.floor(Date.now() / 1000) + 60));
+              const fresh = buildSequence(nextTradeDeadline());
               if (fresh === null) return;
               // Sequential by necessity: a DreamDEX fill must confirm before
               // DreamMargin can pull the shares.
               void (async () => {
-                for (const next of fresh.intents) await run(next);
+                for (const next of fresh.intents) {
+                  const result = await run(next);
+                  if (result?.state.name !== "success") break;
+                }
               })();
             }}
           >
             {leveraged
-              ? `Buy ${amountText} ${side.toUpperCase()} at ${formatMultiple(leverageBps)}`
+              ? `Open ${formatMultiple(leverageBps)} position`
               : `Buy ${amountText} ${side.toUpperCase()}`}
           </Button>
         ) : (

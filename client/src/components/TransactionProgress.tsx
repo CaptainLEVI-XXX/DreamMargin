@@ -75,7 +75,12 @@ export function TransactionProgress({ intent, onReview, onRetry }: Props) {
       ) : null}
 
       {state.name === "success" ? (
-        <p className="dm-progress-headline">Position confirmed on Somnia</p>
+        <>
+          <p className="dm-progress-headline">Transaction confirmed on Somnia</p>
+          <Button variant="secondary" onClick={onReview}>
+            Continue
+          </Button>
+        </>
       ) : null}
     </div>
   );

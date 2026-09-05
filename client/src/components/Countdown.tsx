@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatTimeLeft } from "../domain/time";
 import { Value } from "./Value";
 
 /**
@@ -20,15 +21,9 @@ export function Countdown({ expiry }: { expiry: bigint }) {
   const left = expiry > now ? expiry - now : 0n;
   if (left === 0n) return <span className="dm-countdown">Trading closed</span>;
 
-  // One format at a constant width, so a row's columns never shift as it ticks.
-  const totalHours = left / 3_600n;
-  const m = (left % 3_600n) / 60n;
-  const s = left % 60n;
-  const pad = (v: bigint) => String(v).padStart(2, "0");
-
   return (
     <span className="dm-countdown">
-      <Value>{`${pad(totalHours)}:${pad(m)}:${pad(s)}`}</Value>
+      <Value>{formatTimeLeft(left)}</Value>
     </span>
   );
 }

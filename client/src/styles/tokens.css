@@ -7,6 +7,8 @@
   /* Ground and line */
   --dm-ground: #0a0a0b;
   --dm-surface: #0d0d0f;
+  --dm-panel: #12110f;
+  --dm-panel-raised: #171613;
   --dm-line: #26262a;
   --dm-divider: #1c1c1f;
 
@@ -46,7 +48,8 @@
   --dm-max-width: 1400px;
   --dm-panel-width: 400px;
   --dm-measure: 640px;
-  --dm-radius: 0px;
+  --dm-radius: 8px;
+  --dm-radius-large: 12px;
 
   /* Motion */
   --dm-transition: 175ms ease;

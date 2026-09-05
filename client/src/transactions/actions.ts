@@ -21,7 +21,7 @@ export const testUsdcAbi = parseAbi(["function faucet(uint256 amount)"]);
 
 export const binaryPoolAbi = parseAbi([
   "function mintSet(address yesTo, address noTo, uint256 amount)",
-  "function placeBinaryOrder(uint8 kind, uint128 limitPrice, uint128 quantity, uint64 deadlineNs, uint8 orderType, uint8 selfMatch, address builder, uint16 builderFeeBps, bytes userData) returns (uint256)",
+  "function placeBinaryOrder(uint8 kind, uint256 price, uint256 quantity, uint64 expireTimestampNs, uint8 orderType, uint8 selfMatchingOption, address builder, uint96 builderFeeBpsTimes1k, uint64 userData) payable returns (bool success, uint128 id)",
 ]);
 
 /** tUSDC and outcome shares both use six decimals on this deployment. */
@@ -176,7 +176,7 @@ export function buyOutcomeIntent(input: {
         0,
         "0x0000000000000000000000000000000000000000",
         0,
-        "0x",
+        0n,
       ],
     },
     approval: {

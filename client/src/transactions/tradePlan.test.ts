@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeFunctionData } from "viem";
+import { decodeFunctionData, encodeFunctionData } from "viem";
 import { planTrade } from "./tradePlan";
 import { planAcquisition, type BookLevel } from "../domain/bookQuote";
 import { SCENARIOS } from "../fixtures/scenarios";
@@ -8,180 +8,125 @@ const ONE = 1_000_000n;
 const LOT = 1_000n;
 const ME = "0x1234567890abcdef1234567890abcdef12345678" as const;
 const market = SCENARIOS.healthy.markets[0];
-const ASKS: BookLevel[] = [
-  { yesPrice: 983_000n, quantity: 1_000_000n },
-  { yesPrice: 985_000n, quantity: 5_000_000n },
-];
+const ASKS: BookLevel[] = [{ yesPrice: 550_000n, quantity: 50_000n * ONE }];
 
 function trade(over: Partial<Parameters<typeof planTrade>[0]> = {}) {
-  const quantity = over.quantity ?? 2n * ONE;
-  const owned = over.owned ?? 0n;
-  const acquisition =
-    over.acquisition ??
-    planAcquisition({
-      side: "yes",
-      levels: ASKS,
-      quantity: quantity > owned ? quantity - owned : 0n,
-      oneCollateral: ONE,
-      lotSize: LOT,
-      allowMint: true,
-    });
+  const quantity = over.quantity ?? 500n * ONE;
+  const leverageBps = over.leverageBps ?? 20_000n;
+  const side = over.side ?? "yes";
   return planTrade({
-    market,
-    side: "yes",
+    market: { ...market, riskMark: 450_000n, noRiskMark: 450_000n, yesPrice: 500_000n },
+    side,
     quantity,
-    leverageBps: 10_000n,
-    acquisition,
-    owned,
-    collateralAllowance: 0n,
-    outcomeAllowance: 0n,
+    leverageBps,
+    acquisition:
+      over.acquisition ??
+      planAcquisition({
+        side,
+        levels: ASKS,
+        quantity: leverageBps > 10_000n ? 0n : quantity,
+        oneCollateral: ONE,
+        lotSize: LOT,
+        allowMint: true,
+      }),
+    levels: over.levels ?? ASKS,
+    owned: over.owned ?? 0n,
+    collateralAllowance: over.collateralAllowance ?? 0n,
+    outcomeAllowance: over.outcomeAllowance ?? 0n,
     account: ME,
-    deadlineSeconds: 1_700_000_000n,
+    deadlineSeconds: over.deadlineSeconds ?? 1_700_000_000n,
     lotSize: LOT,
     tickSize: LOT,
     ...over,
   });
 }
 
-describe("1x is a purchase and nothing more", () => {
-  it("plans only the buy", () => {
-    const seq = trade({ leverageBps: 10_000n });
-    expect(seq.intents.map((i) => i.label)).toEqual(["Buy 2 YES"]);
-    expect(seq.borrowed).toBe(0n);
+describe("trade planning", () => {
+  it("keeps 1x as a normal DreamDEX purchase", () => {
+    const sequence = trade({ leverageBps: 10_000n, quantity: 100n * ONE });
+    expect(sequence.stage).toBe("spot");
+    expect(sequence.intents.map((intent) => intent.label)).toEqual(["Buy 100 YES"]);
+    expect(sequence.borrowed).toBe(0n);
   });
 
-  it("needs approval plus order, so two confirmations", () => {
-    expect(trade({ leverageBps: 10_000n }).confirmations).toBe(2);
+  it("opens a leveraged target directly from tUSDC without pre-buying shares", () => {
+    const sequence = trade({ owned: 0n });
+    expect(sequence.stage).toBe("open");
+    expect(sequence.intents).toHaveLength(1);
+    expect(sequence.intents[0].action.functionName).toBe("openFromCollateral");
+    expect(sequence.financedShares).toBe(500n * ONE);
+    expect(sequence.missingShares).toBe(0n);
   });
 
-  it("drops to one confirmation when collateral is already approved", () => {
-    expect(trade({ leverageBps: 10_000n, collateralAllowance: 100n * ONE }).confirmations).toBe(1);
-  });
-});
-
-describe("above 1x adds the position open", () => {
-  it("buys first, then opens", () => {
-    const seq = trade({ leverageBps: 15_000n });
-    expect(seq.intents.map((i) => i.label)).toEqual(["Buy 2 YES", "Open 1.5x position"]);
+  it("mirrors the conservative direct-open debt and spend bounds", () => {
+    const sequence = trade();
+    expect(sequence.maximumCost).toBe(275n * ONE);
+    expect(sequence.borrowed).toBe(112_500_000n);
+    expect(sequence.estimatedUserCollateral).toBe(162_500_000n);
+    expect(sequence.userCollateral).toBe(165_250_000n);
   });
 
-  it("borrows against the shares that will be held", () => {
-    const seq = trade({ leverageBps: 15_000n });
-    expect(seq.borrowed).toBeGreaterThan(0n);
-    expect(seq.committed).toBe(2n * ONE);
-  });
-
-  it("matches the contract's spread-adjusted debt when execution is above the mark", () => {
-    const seq = trade({
-      market: { ...market, riskMark: 450_000n, yesPrice: 550_000n },
-      quantity: 2n * ONE,
-      leverageBps: 12_500n,
-    });
-    expect(seq.borrowed).toBe(215_217n);
-    expect(seq.intents.at(-1)?.reviewed.maxCollateralIn).toBe(215_217n);
-  });
-
-  it("counts every confirmation across both intents", () => {
-    // approve collateral, buy, approve outcome id, open
-    expect(trade({ leverageBps: 15_000n }).confirmations).toBe(4);
-  });
-
-  it("reviews the borrow as a maximum and the fill as a minimum", () => {
-    const open = trade({ leverageBps: 15_000n }).intents[1];
-    expect(open.reviewed.maxCollateralIn).toBe(trade({ leverageBps: 15_000n }).borrowed);
-    expect(open.reviewed.minSharesOut).toBeGreaterThan(0n);
-  });
-
-  it("encodes the open with an ABI that contains openPosition", () => {
-    const open = trade({ leverageBps: 15_000n }).intents[1];
-    expect(open.action.abi).toContainEqual(
-      expect.objectContaining({ type: "function", name: "openPosition" }),
+  it("approves only the bounded tUSDC contribution and encodes the new ABI", () => {
+    const open = trade().intents[0];
+    expect(open.approval?.args).toEqual([expect.anything(), 165_250_000n]);
+    const data = encodeFunctionData({
+      abi: open.action.abi,
+      functionName: open.action.functionName,
+      args: open.action.args,
+    } as never);
+    expect(decodeFunctionData({ abi: open.action.abi, data }).functionName).toBe(
+      "openFromCollateral",
     );
-    expect(() =>
-      encodeFunctionData({
-        abi: open.action.abi,
-        functionName: open.action.functionName,
-        args: open.action.args,
-      } as never),
-    ).not.toThrow();
   });
 
-  it("approves the exact outcome id for exactly the committed shares", () => {
-    const open = trade({ leverageBps: 15_000n }).intents[1];
-    expect(open.approval?.args).toEqual([expect.anything(), market.key.outcomeId, 2n * ONE]);
-  });
-});
-
-describe("shares already held", () => {
-  it("skips the purchase entirely when the wallet already holds enough", () => {
-    const seq = trade({ quantity: 2n * ONE, owned: 5n * ONE, leverageBps: 15_000n });
-    expect(seq.intents.map((i) => i.label)).toEqual(["Open 1.5x position"]);
+  it("needs one confirmation after an existing controller allowance", () => {
+    expect(trade({ collateralAllowance: 200n * ONE }).confirmations).toBe(1);
+    expect(trade({ collateralAllowance: 0n }).confirmations).toBe(2);
   });
 
-  it("commits only the requested size when the wallet holds more", () => {
-    const seq = trade({ quantity: 2n * ONE, owned: 5n * ONE, leverageBps: 15_000n });
-    expect(seq.committed).toBe(2n * ONE);
-  });
-
-  it("buys only the shortfall", () => {
-    const seq = trade({ quantity: 3n * ONE, owned: 1n * ONE, leverageBps: 10_000n });
-    expect(seq.intents[0].label).toBe("Buy 2 YES");
-  });
-});
-
-describe("book depth and minting", () => {
-  it("adds a mint leg when the book cannot cover the size", () => {
-    const seq = trade({ quantity: 10n * ONE, leverageBps: 10_000n });
-    const labels = seq.intents.map((i) => i.label);
-    expect(labels[0]).toMatch(/^Buy 6 YES$/);
-    expect(labels[1]).toMatch(/complete sets/i);
-  });
-
-  it("blocks with a reason when nothing can be acquired", () => {
-    const seq = trade({
-      quantity: 5n * ONE,
-      acquisition: planAcquisition({
-        side: "yes",
-        levels: [],
-        quantity: 5n * ONE,
-        oneCollateral: ONE,
-        lotSize: LOT,
-        allowMint: false,
-      }),
-    });
-    expect(seq.intents).toHaveLength(0);
-    expect(seq.blocked).toMatch(/no liquidity/i);
-  });
-});
-
-describe("side selection", () => {
-  it("opens against the NO outcome index when buying NO", () => {
-    const seq = planTrade({
-      market,
+  it("uses the exact NO id, side index, and YES-denominated limit", () => {
+    const sequence = trade({
       side: "no",
-      quantity: 1n * ONE,
-      leverageBps: 15_000n,
-      acquisition: {
-        fromBook: 1n * ONE,
-        fromMint: 0n,
-        bookCost: 20_000n,
-        mintCost: 0n,
-        limitYesPrice: 980_000n,
-      },
-      owned: 0n,
-      collateralAllowance: 0n,
-      outcomeAllowance: 0n,
-      account: ME,
-      deadlineSeconds: 1n,
-      lotSize: LOT,
-      tickSize: LOT,
+      levels: [{ yesPrice: 450_000n, quantity: 50_000n * ONE }],
     });
-    const open = seq.intents.at(-1);
-    const params = open?.action.args[0] as {
+    const params = sequence.intents[0].action.args[0] as {
       outcomeIndex: number;
       key: { outcomeId: bigint };
+      limitPrice: bigint;
     };
     expect(params.outcomeIndex).toBe(1);
     expect(params.key.outcomeId).toBe(market.key.outcomeId + 1n);
+    expect(params.limitPrice).toBe(450_000n);
+  });
+
+  it("uses the independent NO recovery mark and widens stale authorization safely", () => {
+    const sequence = trade({
+      side: "no",
+      market: {
+        ...market,
+        riskMark: 450_000n,
+        noRiskMark: 400_000n,
+        yesPrice: 500_000n,
+        oracleStale: true,
+      },
+      levels: [{ yesPrice: 450_000n, quantity: 50_000n * ONE }],
+    });
+    const params = sequence.intents[0].action.args[0] as {
+      maxDebt: bigint;
+      maxUserCollateralIn: bigint;
+    };
+
+    expect(sequence.borrowed).toBe(100n * ONE);
+    expect(sequence.estimatedUserCollateral).toBe(175n * ONE);
+    expect(params.maxDebt).toBe(127_500_000n);
+    expect(params.maxUserCollateralIn).toBe(202_500_000n);
+  });
+
+  it("blocks sizes above either visible depth or the on-chain position ceiling", () => {
+    expect(trade({ quantity: 50_001n * ONE }).blocked).toMatch(/maximum position/i);
+    expect(
+      trade({ quantity: 1_000n * ONE, levels: [{ yesPrice: 550_000n, quantity: 500n * ONE }] })
+        .blocked,
+    ).toMatch(/cannot fill/i);
   });
 });

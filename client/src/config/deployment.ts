@@ -5,17 +5,20 @@
 /** Immutable DreamMargin deployment bindings on Somnia Shannon. */
 export const DEPLOYMENT = {
   chainId: 50312,
-  deployedAtBlock: 479866354n,
-  controller: "0xc141ba0c4f7bFAa72628f6Ea28F6e0118F154fe3",
-  vault: "0x97cE780455c04398c6b4b079Dbb3F434619F8027",
-  oracle: "0x979ADc628D88fb0499F0108C0968433B48b9259C",
-  reactiveObserver: "0x117189C8ab4c6Aeb07Cc2c863c724A154ECBb1A5",
+  deployedAtBlock: 480025555n,
+  controller: "0x7237B9E2EE4247c911A8710e9325dB52Fc57Ef1B",
+  vault: "0xBe415FEB724999B6c99790c681B1297309C629E4",
+  oracle: "0x9Dc09C580C8b5E1cc3Ba96135a99d50b2c0406e9",
+  reactiveObserver: "0xB1945D0bfAfBb047010BAaD5E46B889b9cE5de13",
   seriesPolicyId: "0x8a2256ecf5f0225a38c67e560c1157ab952e4a72f46da40fcb7196373bd0ea7c",
   module: "0x3ecC694Cef705358864a646142ac17A90E29e388",
   collateral: "0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E",
   outcomeToken: "0xB52c5934113Af5c0Bb20eb3C72290C8215f755b9",
   collateralDecimals: 6,
   maxPositionPageSize: 100,
+  maximumPositionShares: 20000000000n,
+  certifiedDepthShares: 25000000000n,
+  seededBookShares: 50000000000n,
 } as const;
 
 /** Dedicated, long-lived DreamDEX generations supported by this client. */

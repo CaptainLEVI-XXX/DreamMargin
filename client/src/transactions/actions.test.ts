@@ -1,3 +1,4 @@
+import { encodeFunctionData } from "viem";
 import { describe, expect, it } from "vitest";
 import { controllerAbi } from "../web3/abis/controllerAbi";
 import { vaultAbi } from "../web3/abis/vaultAbi";
@@ -145,6 +146,16 @@ describe("buyOutcome", () => {
   it("buys YES with the YES order kind", () => {
     const intent = buyOutcomeIntent({ ...base, side: "yes", maxPrice: 985_000n });
     expect(intent.action.args[0]).toBe(OrderKind.BuyYes);
+  });
+
+  it("encodes the selector deployed by the DreamDEX binary pool", () => {
+    const intent = buyOutcomeIntent({ ...base, side: "yes", maxPrice: 985_000n });
+    const data = encodeFunctionData({
+      abi: intent.action.abi,
+      functionName: intent.action.functionName,
+      args: intent.action.args,
+    } as never);
+    expect(data.slice(0, 10)).toBe("0x718c2d4d");
   });
 
   it("buys NO with the NO order kind", () => {

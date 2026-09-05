@@ -2,6 +2,7 @@ import {
   createWalletClient,
   custom,
   decodeErrorResult,
+  parseAbi,
   parseEventLogs,
   type Address,
   type Hash,
@@ -17,6 +18,9 @@ import { vaultAbi } from "../web3/abis/vaultAbi";
 import type { Eip1193 } from "../web3/wallet";
 import type { CallPlan } from "./callPlan";
 import type { ExecutorDeps, SimulatedRequest } from "./executor";
+
+/** Errors surfaced by the Solady tokens used inside DreamDEX integrations. */
+const integrationErrorsAbi = parseAbi(["error InsufficientBalance()"]);
 
 /**
  * The viem-backed half of the executor: everything that actually touches a
@@ -46,7 +50,7 @@ export function explainRevert(error: unknown): string {
   const data = findRevertData(error);
   if (data !== null) {
     try {
-      const decoded = decodeErrorResult({ abi: errorsAbi, data }) as {
+      const decoded = decodeErrorResult({ abi: [...errorsAbi, ...integrationErrorsAbi], data }) as {
         errorName?: string;
       };
       if (decoded.errorName !== undefined) return describeContractError(decoded.errorName).message;
@@ -119,27 +123,35 @@ export function viemDeps(input: ViemDepsInput): ExecutorDeps {
   return {
     async simulateApproval(): Promise<SimulatedRequest> {
       if (input.approval === undefined) throw new Error("no approval planned");
-      const { request } = await publicClient.simulateContract({
-        account,
-        address: input.approval.address,
-        abi: input.approval.abi as never,
-        functionName: input.approval.functionName as never,
-        args: input.approval.args as never,
-      });
-      return { request };
+      try {
+        const { request } = await publicClient.simulateContract({
+          account,
+          address: input.approval.address,
+          abi: input.approval.abi as never,
+          functionName: input.approval.functionName as never,
+          args: input.approval.args as never,
+        });
+        return { request };
+      } catch (error) {
+        throw new Error(explainRevert(error), { cause: error });
+      }
     },
 
     async simulateAction() {
       const action = await input.buildAction();
       // §17: simulate against the current block immediately before signing.
-      const { request } = await publicClient.simulateContract({
-        account,
-        address: input.actionAddress ?? (DEPLOYMENT.controller as Address),
-        abi: (input.actionAbi ?? controllerAbi) as never,
-        functionName: action.functionName as never,
-        args: action.args as never,
-      });
-      return { simulated: { request }, fresh: action.fresh };
+      try {
+        const { request } = await publicClient.simulateContract({
+          account,
+          address: input.actionAddress ?? (DEPLOYMENT.controller as Address),
+          abi: (input.actionAbi ?? controllerAbi) as never,
+          functionName: action.functionName as never,
+          args: action.args as never,
+        });
+        return { simulated: { request }, fresh: action.fresh };
+      } catch (error) {
+        throw new Error(explainRevert(error), { cause: error });
+      }
     },
 
     async send(simulated) {

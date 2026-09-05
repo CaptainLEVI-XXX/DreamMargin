@@ -1,7 +1,8 @@
 .dm-chart {
   margin: 0 0 calc(var(--dm-space) * 2);
   border: 1px solid var(--dm-line);
-  border-radius: var(--dm-radius);
+  border-radius: var(--dm-radius-large);
+  background: var(--dm-panel);
   padding: calc(var(--dm-space) * 2);
 }
 

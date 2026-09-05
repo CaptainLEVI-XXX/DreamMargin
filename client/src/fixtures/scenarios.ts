@@ -37,6 +37,7 @@ function market(over: Partial<MarketView> & { key: MarketKey; question: string }
     collateralDecimals: 6,
     yesPrice: 620_000n,
     riskMark: 605_000n,
+    noRiskMark: 375_000n,
     estimatedExitValue: 598_000n,
     maxLeverageBps: 20_000n,
     riskTier: "Standard",
@@ -69,6 +70,7 @@ const btcMarket = market({
   asset: "BTC",
   yesPrice: 480_000n,
   riskMark: 470_000n,
+  noRiskMark: 510_000n,
   estimatedExitValue: 462_000n,
 });
 

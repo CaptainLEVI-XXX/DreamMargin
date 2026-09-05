@@ -3,6 +3,7 @@ import { errorsAbi } from "../web3/abis/errorsAbi";
 import { describeContractError, mappedErrorNames } from "./errors";
 
 const CONTRACT_ERRORS = errorsAbi.filter((e) => e.type === "error").map((e) => e.name as string);
+const INTEGRATION_ERRORS = ["InsufficientBalance"];
 
 describe("describeContractError", () => {
   it("maps a stale oracle to recovery that keeps repay available", () => {
@@ -69,7 +70,9 @@ describe("describeContractError", () => {
 
 describe("mapping stays in step with the contracts", () => {
   it("maps only errors the contracts actually declare", () => {
-    const unknown = mappedErrorNames().filter((n) => !CONTRACT_ERRORS.includes(n));
+    const unknown = mappedErrorNames().filter(
+      (n) => !CONTRACT_ERRORS.includes(n) && !INTEGRATION_ERRORS.includes(n),
+    );
     expect(unknown, `mapped but not declared on-chain: ${unknown.join(", ")}`).toEqual([]);
   });
 

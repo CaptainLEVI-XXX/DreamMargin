@@ -1,47 +1,23 @@
-import type { Address } from "viem";
-import { formatUnits, mulDivDown, quantizeDown } from "../domain/amounts";
-import type { AcquisitionPlan } from "../domain/bookQuote";
+import { erc20Abi, type Address } from "viem";
+import { formatUnits, mulDivDown, mulDivUp } from "../domain/amounts";
+import { quoteBuy, type AcquisitionPlan, type BookLevel } from "../domain/bookQuote";
 import type { MarketView } from "../domain/models";
 import { buyOutcomeIntent, mintSetIntent, type Intent as ActionIntent } from "./actions";
 import { buildCallPlan } from "./callPlan";
 import { DEPLOYMENT } from "../config/deployment";
-import { erc6909Abi } from "@somnia-chain/markets-sdk";
 import { controllerAbi } from "../web3/abis/controllerAbi";
 
 const BPS = 10_000n;
-
-/** Mirror LibPositionRisk.targetDebtAtLimitDown with the same operation order. */
-function targetDebtAtLimitDown(
-  equity: bigint,
-  leverageBps: bigint,
-  markPrice: bigint,
-  limitSidePrice: bigint,
-): bigint {
-  const leverageDelta = leverageBps - BPS;
-  const nominalDebt = mulDivDown(equity, leverageDelta, BPS);
-  if (limitSidePrice <= markPrice) return nominalDebt;
-
-  const discountedEquity = mulDivDown(equity, leverageDelta, leverageBps);
-  const discountedMark = mulDivDown(markPrice, leverageDelta, leverageBps);
-  const adjustedDebt = mulDivDown(
-    discountedEquity,
-    limitSidePrice,
-    limitSidePrice - discountedMark,
-  );
-  return adjustedDebt < nominalDebt ? adjustedDebt : nominalDebt;
-}
+const FRESH_MARK_BUFFER_BPS = 100n;
+const STALE_MARK_BUFFER_BPS = 1_000n;
 
 /**
  * Compose one trade into the ordered intents it actually requires.
  *
- * A trade is described by a side, a size, and a multiple. At 1x it is a
- * purchase and nothing more. Above 1x it is a purchase followed by opening an
- * isolated position against the resulting shares — still two transactions,
- * because the DreamDEX fill must confirm before DreamMargin can pull the
- * shares, but presented as one decision rather than two screens.
- *
- * Shares already held are used first, so a trader who owns the outcome does not
- * buy it again.
+ * At 1x the size is a normal DreamDEX purchase. Above 1x the controller pulls
+ * tUSDC, borrows from the vault, buys the exact requested shares, and records
+ * the position in one action. The owner never needs to pre-buy or approve
+ * ERC-6909 outcome shares.
  */
 export type TradeInput = {
   market: MarketView;
@@ -50,6 +26,8 @@ export type TradeInput = {
   quantity: bigint;
   leverageBps: bigint;
   acquisition: AcquisitionPlan;
+  /** Selected-side levels, best first, used only for the financed controller buy. */
+  levels: readonly BookLevel[];
   owned: bigint;
   collateralAllowance: bigint;
   outcomeAllowance: bigint;
@@ -60,36 +38,146 @@ export type TradeInput = {
 };
 
 export type TradeSequence = {
+  stage: "spot" | "acquire" | "open";
   intents: ActionIntent[];
-  /** Total wallet confirmations across the sequence, batching aside. */
+  /** Wallet confirmations for this stage, batching aside. */
   confirmations: number;
-  /** Shares expected to be committed to the position. */
+  /** Owner-supplied shares committed to a leveraged position. */
   committed: bigint;
   borrowed: bigint;
+  /** Exact outcome shares bought into controller custody. */
+  financedShares: bigint;
+  /** Retained for spot/acquisition presentation; always zero for direct leverage. */
+  missingShares: bigint;
+  /** Maximum tUSDC pulled from the trader by the direct leveraged open. */
+  userCollateral: bigint;
+  /** Owner contribution estimated from the mark currently displayed. */
+  estimatedUserCollateral: bigint;
+  /** Worst-case collateral cost at the reviewed FOK limit. */
+  maximumCost: bigint;
   /** Set when the size cannot be acquired at all. */
   blocked?: string;
 };
+
+type FinancingQuote = {
+  borrowed: bigint;
+  maxDebt: bigint;
+  shares: bigint;
+  userCollateral: bigint;
+  estimatedUserCollateral: bigint;
+  maximumCost: bigint;
+  limitYesPrice: bigint;
+  blocked?: string;
+};
+
+/**
+ * Mirror the direct-open debt and owner-collateral bounds. The contract values
+ * the exact target at the conservative mark, caps debt by both mark value and
+ * acquisition cost, and sends any unused maximum cost back to the owner.
+ */
+function quoteFinancing(input: TradeInput): FinancingQuote {
+  const { market } = input;
+  const riskMark = input.side === "yes" ? market.riskMark : market.noRiskMark;
+  if (input.quantity === 0n || input.quantity % input.lotSize !== 0n) {
+    return {
+      borrowed: 0n,
+      maxDebt: 0n,
+      shares: 0n,
+      userCollateral: 0n,
+      estimatedUserCollateral: 0n,
+      maximumCost: 0n,
+      limitYesPrice: 0n,
+      blocked: "Enter a non-zero amount in whole market lots",
+    };
+  }
+  if (input.quantity > DEPLOYMENT.maximumPositionShares) {
+    return {
+      borrowed: 0n,
+      maxDebt: 0n,
+      shares: input.quantity,
+      userCollateral: 0n,
+      estimatedUserCollateral: 0n,
+      maximumCost: 0n,
+      limitYesPrice: 0n,
+      blocked: `The maximum position is ${formatUnits(DEPLOYMENT.maximumPositionShares, market.collateralDecimals)} shares`,
+    };
+  }
+  const book = quoteBuy({
+    side: input.side,
+    levels: input.levels,
+    quantity: input.quantity,
+    oneCollateral: market.oneCollateral,
+    lotSize: input.lotSize,
+  });
+  if (book.fillable !== input.quantity || book.limitYesPrice === 0n) {
+    return {
+      borrowed: 0n,
+      maxDebt: 0n,
+      shares: input.quantity,
+      userCollateral: 0n,
+      estimatedUserCollateral: 0n,
+      maximumCost: 0n,
+      limitYesPrice: book.limitYesPrice,
+      blocked: "The order book cannot fill this exact position size",
+    };
+  }
+  const sidePrice =
+    input.side === "yes" ? book.limitYesPrice : market.oneCollateral - book.limitYesPrice;
+  const grossValue = mulDivDown(input.quantity, riskMark, market.oneCollateral);
+  const maximumCost = mulDivUp(input.quantity, sidePrice, market.oneCollateral);
+  const valueEquity = mulDivUp(grossValue, BPS, input.leverageBps);
+  const costEquity = mulDivUp(maximumCost, BPS, input.leverageBps);
+  const valueDebt = grossValue > valueEquity ? grossValue - valueEquity : 0n;
+  const costDebt = maximumCost > costEquity ? maximumCost - costEquity : 0n;
+  const borrowed = valueDebt < costDebt ? valueDebt : costDebt;
+  const estimatedUserCollateral = maximumCost - borrowed;
+  // The write records a due oracle sample before recomputing the funding split.
+  // Authorizing the exact pre-refresh number makes a one-unit mark change fail.
+  // A fresh quote gets 1% of total cost; a stale quote gets 10% because its
+  // displayed mark is the current executable recovery rather than retained TWAP.
+  // Both limits remain capped by the cost-side leverage bound and total order cost.
+  const bufferBps = market.oracleStale ? STALE_MARK_BUFFER_BPS : FRESH_MARK_BUFFER_BPS;
+  const markBuffer = mulDivUp(maximumCost, bufferBps, BPS);
+  const maxDebt = borrowed + markBuffer < costDebt ? borrowed + markBuffer : costDebt;
+  const userCollateral =
+    estimatedUserCollateral + markBuffer < maximumCost
+      ? estimatedUserCollateral + markBuffer
+      : maximumCost;
+  return {
+    borrowed,
+    maxDebt,
+    shares: input.quantity,
+    userCollateral,
+    estimatedUserCollateral,
+    maximumCost,
+    limitYesPrice: book.limitYesPrice,
+  };
+}
 
 export function planTrade(input: TradeInput): TradeSequence {
   const { market, acquisition } = input;
   const intents: ActionIntent[] = [];
   const outcomeId = input.side === "yes" ? market.key.outcomeId : market.key.outcomeId + 1n;
-
-  const ownedUsed = input.owned < input.quantity ? input.owned : input.quantity;
-  const needed = input.quantity - ownedUsed;
+  const leveraged = input.leverageBps > BPS;
   const acquired = acquisition.fromBook + acquisition.fromMint;
 
-  if (needed > 0n && acquired === 0n) {
+  if (!leveraged && input.quantity > 0n && acquired === 0n) {
     return {
       intents: [],
+      stage: "spot",
       confirmations: 0,
       committed: 0n,
       borrowed: 0n,
+      financedShares: 0n,
+      missingShares: input.quantity,
+      userCollateral: 0n,
+      estimatedUserCollateral: 0n,
+      maximumCost: 0n,
       blocked: "The book has no liquidity at this size and minting is unavailable",
     };
   }
 
-  if (acquisition.fromBook > 0n) {
+  if (!leveraged && acquisition.fromBook > 0n) {
     intents.push(
       buyOutcomeIntent({
         pool: market.key.pool as Address,
@@ -108,78 +196,96 @@ export function planTrade(input: TradeInput): TradeSequence {
     );
   }
 
-  if (acquisition.fromMint > 0n) {
+  if (!leveraged && acquisition.fromMint > 0n) {
     intents.push(mintSetIntent(market.key.pool as Address, acquisition.fromMint, input.account));
   }
 
-  const committed = ownedUsed + acquired;
-  const riskMark = input.side === "yes" ? market.riskMark : market.oneCollateral - market.riskMark;
-  const marketPrice =
-    input.side === "yes" ? market.yesPrice : market.oneCollateral - market.yesPrice;
-  const equity = mulDivDown(committed, riskMark, market.oneCollateral);
-  const borrowed =
-    input.leverageBps > BPS
-      ? targetDebtAtLimitDown(equity, input.leverageBps, riskMark, marketPrice)
-      : 0n;
-
-  if (input.leverageBps > BPS) {
-    const purchaseQuantity = quantizeDown(
-      mulDivDown(borrowed, market.oneCollateral, marketPrice),
-      input.lotSize,
-    );
-    const minSharesOut = mulDivDown(purchaseQuantity, 9_900n, BPS);
-
-    intents.push({
-      label: `Open ${Number(input.leverageBps) / 10_000}x position`,
-      plan: buildCallPlan({
-        action: { to: DEPLOYMENT.controller as Address, label: "Open leveraged position" },
-        erc6909: {
-          token: DEPLOYMENT.outcomeToken as Address,
-          spender: DEPLOYMENT.controller as Address,
-          outcomeId,
-          required: committed,
-          current: input.outcomeAllowance,
-          label: `Approve ${formatUnits(committed, market.collateralDecimals, 2)} shares only`,
-        },
-      }),
-      reviewed: {
-        side: "buy",
-        maxCollateralIn: borrowed,
-        minSharesOut,
-        limitPrice: market.yesPrice,
-      },
-      action: {
-        address: DEPLOYMENT.controller as Address,
-        abi: controllerAbi,
-        functionName: "openPosition",
-        args: [
-          {
-            key: { ...market.key, outcomeId },
-            outcomeIndex: input.side === "yes" ? 0 : 1,
-            initialShares: committed,
-            leverageBps: input.leverageBps,
-            maxCollateralIn: borrowed,
-            minSharesOut,
-            limitPrice: market.yesPrice,
-            orderType: 2,
-            deadline: input.deadlineSeconds,
-          },
-        ],
-      },
-      expectedEvent: "PositionOpened",
-      approval: {
-        address: DEPLOYMENT.outcomeToken as Address,
-        abi: erc6909Abi as readonly unknown[],
-        functionName: "approve",
-        args: [DEPLOYMENT.controller, outcomeId, committed],
-      },
-    });
+  if (!leveraged) {
+    return {
+      stage: "spot",
+      intents,
+      confirmations: intents.reduce((n, i) => n + i.plan.sequentialConfirmations, 0),
+      committed: 0n,
+      borrowed: 0n,
+      financedShares: 0n,
+      missingShares: 0n,
+      userCollateral: acquisition.bookCost + acquisition.mintCost,
+      estimatedUserCollateral: acquisition.bookCost + acquisition.mintCost,
+      maximumCost: acquisition.bookCost + acquisition.mintCost,
+    };
   }
 
+  const financing = quoteFinancing(input);
+  if (financing.blocked !== undefined) {
+    return {
+      stage: "open",
+      intents: [],
+      confirmations: 0,
+      committed: input.quantity,
+      borrowed: financing.borrowed,
+      financedShares: financing.shares,
+      missingShares: 0n,
+      userCollateral: financing.userCollateral,
+      estimatedUserCollateral: financing.estimatedUserCollateral,
+      maximumCost: financing.maximumCost,
+      blocked: financing.blocked,
+    };
+  }
+
+  intents.push({
+    label: `Open ${Number(input.leverageBps) / 10_000}x position`,
+    plan: buildCallPlan({
+      action: { to: DEPLOYMENT.controller as Address, label: "Open leveraged position" },
+      erc20: {
+        token: DEPLOYMENT.collateral as Address,
+        spender: DEPLOYMENT.controller as Address,
+        required: financing.userCollateral,
+        current: input.collateralAllowance,
+        label: `Approve up to ${formatUnits(financing.userCollateral, market.collateralDecimals, 2)} tUSDC`,
+      },
+    }),
+    reviewed: {
+      side: "buy",
+      maxCollateralIn: financing.userCollateral,
+      minSharesOut: input.quantity,
+      limitPrice: financing.limitYesPrice,
+    },
+    action: {
+      address: DEPLOYMENT.controller as Address,
+      abi: controllerAbi,
+      functionName: "openFromCollateral",
+      args: [
+        {
+          key: { ...market.key, outcomeId },
+          outcomeIndex: input.side === "yes" ? 0 : 1,
+          targetShares: input.quantity,
+          leverageBps: input.leverageBps,
+          maxUserCollateralIn: financing.userCollateral,
+          maxDebt: financing.maxDebt,
+          limitPrice: financing.limitYesPrice,
+          deadline: input.deadlineSeconds,
+        },
+      ],
+    },
+    expectedEvent: "PositionOpened",
+    approval: {
+      address: DEPLOYMENT.collateral as Address,
+      abi: erc20Abi,
+      functionName: "approve",
+      args: [DEPLOYMENT.controller, financing.userCollateral],
+    },
+  });
+
   return {
+    stage: "open",
     intents,
     confirmations: intents.reduce((n, i) => n + i.plan.sequentialConfirmations, 0),
-    committed,
-    borrowed: input.leverageBps > BPS ? borrowed : 0n,
+    committed: input.quantity,
+    borrowed: financing.borrowed,
+    financedShares: financing.shares,
+    missingShares: 0n,
+    userCollateral: financing.userCollateral,
+    estimatedUserCollateral: financing.estimatedUserCollateral,
+    maximumCost: financing.maximumCost,
   };
 }
