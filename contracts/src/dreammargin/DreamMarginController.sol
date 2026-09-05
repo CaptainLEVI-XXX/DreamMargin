@@ -23,7 +23,9 @@ import {
   PendingChange,
   Position,
   ProtocolMode,
-  RiskConfig
+  RiskConfig,
+  SeriesOracleConfig,
+  SeriesPolicy
 } from "src/libs/dreammargin/LibDreamMarginStorage.sol";
 
 /// @notice Administrative controller shell statically composed with the DreamDEX adapter.
@@ -294,12 +296,57 @@ contract DreamMarginController is IDreamMarginController, DreamDexAdapter {
   }
 
   /// @inheritdoc IDreamMarginController
+  function positionsOf(address owner, uint256 offset, uint256 limit)
+    external
+    view
+    returns (uint256[] memory ids, uint256 total)
+  {
+    if (limit > LibDreamMarginConstants.MAX_POSITION_PAGE_SIZE) {
+      revert LibDreamMarginErrors.ValueOutOfBounds(
+        "POSITION_PAGE_LIMIT", limit, LibDreamMarginConstants.MAX_POSITION_PAGE_SIZE
+      );
+    }
+    uint256[] storage positionIds = LibDreamMarginStorage.get().ownerPositionIds[owner];
+    total = positionIds.length;
+    if (offset >= total || limit == 0) return (new uint256[](0), total);
+
+    uint256 length = total - offset;
+    if (length > limit) length = limit;
+    ids = new uint256[](length);
+    for (uint256 i = 0; i < length; ++i) {
+      ids[i] = positionIds[offset + i];
+    }
+  }
+
+  /// @inheritdoc IDreamMarginController
   function getGeneration(bytes32 generationKey)
     external
     view
     returns (GenerationConfig memory config)
   {
     config = LibDreamMarginStorage.get().generations[generationKey];
+  }
+
+  /// @inheritdoc IDreamMarginController
+  function getSeriesPolicy(bytes32 policyId) external view returns (SeriesPolicy memory policy) {
+    policy = LibDreamMarginStorage.get().seriesPolicies[policyId];
+  }
+
+  /// @inheritdoc IDreamMarginController
+  function policyFor(bytes32 marketId) external view returns (bytes32 policyId, bool eligible) {
+    ModuleMarket memory market_ = _readModuleMarket(_MODULE, marketId);
+    LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
+    policyId = self.policyIdsByIdentity[_seriesIdentity(market_)];
+    if (policyId == bytes32(0)) return (policyId, eligible);
+    SeriesPolicy storage policy = self.seriesPolicies[policyId];
+    eligible = policy.enabled && !policy.frozen && market_.outcomeSlotCount == 2
+      && market_.expiry > market_.tradingStart
+      && uint256(market_.expiry) - market_.tradingStart >= policy.minIntervalSec;
+  }
+
+  /// @inheritdoc IDreamMarginController
+  function policyForGeneration(bytes32 generationKey) external view returns (bytes32 policyId) {
+    policyId = LibDreamMarginStorage.get().generationPolicies[generationKey];
   }
 
   /// @inheritdoc IDreamMarginController
@@ -321,6 +368,20 @@ contract DreamMarginController is IDreamMarginController, DreamDexAdapter {
     bytes32 payloadHash = keccak256(
       abi.encode(this.executeGenerationChange.selector, generationKey, config, oracleConfig)
     );
+    _recordChange(changeId, payloadHash);
+  }
+
+  /// @inheritdoc IDreamMarginController
+  function scheduleSeriesPolicyChange(
+    bytes32 changeId,
+    bytes32 policyId,
+    SeriesPolicy calldata policy
+  ) external {
+    _requireAnyRole(
+      LibDreamMarginConstants.ROLE_GOVERNANCE | LibDreamMarginConstants.ROLE_RISK_STEWARD
+    );
+    bytes32 payloadHash =
+      keccak256(abi.encode(this.executeSeriesPolicyChange.selector, policyId, policy));
     _recordChange(changeId, payloadHash);
   }
 
@@ -375,6 +436,18 @@ contract DreamMarginController is IDreamMarginController, DreamDexAdapter {
   }
 
   /// @inheritdoc IDreamMarginController
+  function freezeSeriesPolicy(bytes32 policyId) external {
+    _requireAnyRole(LibDreamMarginConstants.ROLE_GOVERNANCE | LibDreamMarginConstants.ROLE_GUARDIAN);
+    SeriesPolicy storage policy = LibDreamMarginStorage.get().seriesPolicies[policyId];
+    if (policy.creator == address(0)) {
+      revert LibDreamMarginErrors.UnsupportedSeriesPolicy(policyId);
+    }
+    policy.frozen = true;
+    policy.enabled = false;
+    emit SeriesPolicyFrozen(policyId, msg.sender);
+  }
+
+  /// @inheritdoc IDreamMarginController
   function executeRoleChange(bytes32 changeId, address account, uint256 roles) external {
     _nonzero(account, "ROLE_ACCOUNT");
     if (roles & ~_ALL_ROLES != 0) {
@@ -414,7 +487,196 @@ contract DreamMarginController is IDreamMarginController, DreamDexAdapter {
       IDreamDexMarkOracle(_ORACLE).configureGeneration(generationKey, oracleConfig);
     }
     self.generations[generationKey] = config;
+    delete self.generationPolicies[generationKey];
     emit GenerationUpdated(generationKey, config.enabled, config.frozen);
+  }
+
+  /// @inheritdoc IDreamMarginController
+  function executeSeriesPolicyChange(
+    bytes32 changeId,
+    bytes32 policyId,
+    SeriesPolicy calldata policy
+  ) external {
+    bytes32 payloadHash = keccak256(
+      abi.encode(this.executeSeriesPolicyChange.selector, policyId, policy)
+    );
+    _consumeChange(changeId, payloadHash);
+    _validateSeriesPolicy(policyId, policy);
+
+    LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
+    SeriesPolicy storage previous = self.seriesPolicies[policyId];
+    if (previous.creator != address(0)) {
+      bytes32 previousIdentity = _seriesIdentity(
+        previous.creator, previous.originVenueId, previous.originOperatorId, previous.collateral
+      );
+      if (self.policyIdsByIdentity[previousIdentity] == policyId) {
+        delete self.policyIdsByIdentity[previousIdentity];
+      }
+    }
+
+    bytes32 identity = _seriesIdentity(
+      policy.creator, policy.originVenueId, policy.originOperatorId, policy.collateral
+    );
+    bytes32 claimedBy = self.policyIdsByIdentity[identity];
+    if (claimedBy != bytes32(0) && claimedBy != policyId) {
+      revert LibDreamMarginErrors.SeriesPolicyIdentityClaimed(identity, claimedBy);
+    }
+    self.seriesPolicies[policyId] = policy;
+    self.policyIdsByIdentity[identity] = policyId;
+    emit SeriesPolicyUpdated(policyId, identity, policy.enabled, policy.frozen);
+  }
+
+  /// @inheritdoc IDreamMarginController
+  function activateSeriesGeneration(MarketKey calldata key, uint8 outcomeIndex)
+    external
+    returns (bytes32 generationKey, bytes32 policyId)
+  {
+    MarketKey memory generationKeyData = key;
+    generationKey = LibDreamMarginStorage.generationKey(generationKeyData);
+    LibDreamMarginStorage.State storage self = LibDreamMarginStorage.get();
+    if (self.generations[generationKey].key.pool != address(0)) {
+      revert LibDreamMarginErrors.GenerationAlreadyConfigured(generationKey);
+    }
+
+    ModuleMarket memory market_ = _readModuleMarket(_MODULE, key.marketId);
+    bytes32 identity = _seriesIdentity(market_);
+    policyId = self.policyIdsByIdentity[identity];
+    if (policyId == bytes32(0)) {
+      revert LibDreamMarginErrors.UnsupportedSeriesIdentity(identity);
+    }
+    SeriesPolicy storage policy = self.seriesPolicies[policyId];
+    if (policy.frozen) revert LibDreamMarginErrors.SeriesPolicyFrozen(policyId);
+    if (!policy.enabled) revert LibDreamMarginErrors.UnsupportedSeriesPolicy(policyId);
+    if (market_.outcomeSlotCount != 2) {
+      revert LibDreamMarginErrors.ValueOutOfBounds(
+        "OUTCOME_SLOT_COUNT", market_.outcomeSlotCount, 2
+      );
+    }
+    uint256 interval =
+      market_.expiry > market_.tradingStart ? uint256(market_.expiry) - market_.tradingStart : 0;
+    if (interval < policy.minIntervalSec) {
+      revert LibDreamMarginErrors.SeriesIntervalTooShort(
+        key.marketId, interval, policy.minIntervalSec
+      );
+    }
+
+    _validateGeneration(_MODULE, generationKeyData, outcomeIndex, true);
+    RiskConfig memory risk = policy.risk;
+    risk.outcomeIndex = outcomeIndex;
+    _validateRisk(risk, policy.oracle.maxBookLevels);
+    GenerationConfig memory generation = GenerationConfig({
+      key: generationKeyData,
+      risk: risk,
+      marketGroup: _seriesMarketGroup(generationKeyData),
+      enabled: true,
+      frozen: false
+    });
+    OracleConfig memory oracleConfig = OracleConfig({
+      key: generationKeyData,
+      minAge: policy.oracle.minAge,
+      updateInterval: policy.oracle.updateInterval,
+      staleAfter: policy.oracle.staleAfter,
+      depthQuantity: policy.oracle.depthQuantity,
+      maxObservations: policy.oracle.maxObservations,
+      maxBookLevels: policy.oracle.maxBookLevels,
+      enabled: true
+    });
+    IDreamDexMarkOracle(_ORACLE).configureGeneration(generationKey, oracleConfig);
+    self.generations[generationKey] = generation;
+    self.generationPolicies[generationKey] = policyId;
+    emit GenerationUpdated(generationKey, true, false);
+    emit SeriesGenerationActivated(generationKey, policyId, generation.marketGroup, outcomeIndex);
+  }
+
+  /// @notice Validates one delayed reusable origin, risk, and oracle policy.
+  /// @param policyId Nonzero governance-selected identifier.
+  /// @param policy Candidate reusable policy.
+  function _validateSeriesPolicy(bytes32 policyId, SeriesPolicy calldata policy) private view {
+    if (policyId == bytes32(0)) revert LibDreamMarginErrors.ZeroAmount(0);
+    _nonzero(policy.creator, "SERIES_CREATOR");
+    _nonzero(policy.collateral, "SERIES_COLLATERAL");
+    address asset = IDreamMarginVault(_VAULT).asset();
+    if (policy.collateral != asset) {
+      revert LibDreamMarginErrors.IntegrationValueMismatch(
+        "VAULT_ASSET",
+        bytes32(uint256(uint160(asset))),
+        bytes32(uint256(uint160(policy.collateral)))
+      );
+    }
+    if (policy.risk.outcomeIndex != 0) {
+      revert LibDreamMarginErrors.ValueOutOfBounds(
+        "POLICY_OUTCOME_INDEX", policy.risk.outcomeIndex, 0
+      );
+    }
+    _validateSeriesOracle(policy.oracle);
+    _validateRisk(policy.risk, policy.oracle.maxBookLevels);
+    uint256 minimumInterval = uint256(policy.risk.openingCutoff) + uint256(policy.oracle.minAge) + 1;
+    if (policy.minIntervalSec < minimumInterval) {
+      revert LibDreamMarginErrors.SeriesIntervalTooShort(
+        bytes32(0), policy.minIntervalSec, minimumInterval
+      );
+    }
+  }
+
+  /// @notice Validates the keyless oracle template before it can admit future generations.
+  /// @param config Candidate bounded observation template.
+  function _validateSeriesOracle(SeriesOracleConfig calldata config) private pure {
+    if (config.minAge == 0) revert LibDreamMarginErrors.ZeroAmount(config.minAge);
+    if (config.updateInterval == 0) {
+      revert LibDreamMarginErrors.ZeroAmount(config.updateInterval);
+    }
+    if (config.staleAfter < config.updateInterval) {
+      revert LibDreamMarginErrors.ValueOutOfBounds(
+        "STALE_AFTER", config.staleAfter, config.updateInterval
+      );
+    }
+    if (config.depthQuantity == 0) revert LibDreamMarginErrors.ZeroAmount(config.depthQuantity);
+    if (config.maxObservations < 2) {
+      revert LibDreamMarginErrors.ValueOutOfBounds("MAX_OBSERVATIONS", config.maxObservations, 1);
+    }
+    if (config.maxObservations > LibDreamMarginConstants.MAX_OBSERVATIONS) {
+      revert LibDreamMarginErrors.ValueOutOfBounds(
+        "MAX_OBSERVATIONS", config.maxObservations, LibDreamMarginConstants.MAX_OBSERVATIONS
+      );
+    }
+    if (config.maxBookLevels == 0 || config.maxBookLevels > LibDreamMarginConstants.MAX_BOOK_LEVELS)
+    {
+      revert LibDreamMarginErrors.ValueOutOfBounds(
+        "MAX_BOOK_LEVELS", config.maxBookLevels, LibDreamMarginConstants.MAX_BOOK_LEVELS
+      );
+    }
+  }
+
+  /// @notice Hashes the origin fields that grant one creator continuing admission authority.
+  /// @param creator DreamDEX market creator.
+  /// @param venueId DreamDEX venue identifier.
+  /// @param operatorId DreamDEX operator identifier.
+  /// @param collateral Required market collateral.
+  /// @return identity Collision-resistant reusable-policy lookup key.
+  function _seriesIdentity(address creator, bytes32 venueId, uint32 operatorId, address collateral)
+    private
+    pure
+    returns (bytes32 identity)
+  {
+    identity = keccak256(abi.encode(creator, venueId, operatorId, collateral));
+  }
+
+  /// @notice Hashes one module record's reusable origin fields.
+  /// @param market_ Complete current module market record.
+  /// @return identity Collision-resistant reusable-policy lookup key.
+  function _seriesIdentity(ModuleMarket memory market_) private pure returns (bytes32 identity) {
+    identity = _seriesIdentity(
+      market_.creator, market_.originVenueId, market_.originOperatorId, market_.collateral
+    );
+  }
+
+  /// @notice Derives the exposure bucket shared by both outcomes of one recyclable generation.
+  /// @param key Exact activated generation tuple.
+  /// @return marketGroup Generation-scoped market exposure identifier.
+  function _seriesMarketGroup(MarketKey memory key) private pure returns (bytes32 marketGroup) {
+    marketGroup = keccak256(
+      abi.encode("DREAM_MARGIN_SERIES_GENERATION", key.marketId, key.pool, key.marketNonce)
+    );
   }
 
   /// @inheritdoc IDreamMarginController
@@ -510,7 +772,7 @@ contract DreamMarginController is IDreamMarginController, DreamDexAdapter {
   /// @notice Validates one per-generation risk record against structural and global bounds.
   /// @param risk Candidate risk policy.
   /// @param oracleBookLevels Immutable oracle book-walk bound.
-  function _validateRisk(RiskConfig calldata risk, uint16 oracleBookLevels) private view {
+  function _validateRisk(RiskConfig memory risk, uint16 oracleBookLevels) private view {
     GlobalRiskConfig storage globalRisk = LibDreamMarginStorage.get().globalRisk;
     if (
       risk.maxDebtPerPosition == 0 || risk.maxDebtPerPosition > risk.maxDebtPerOutcome

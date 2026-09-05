@@ -586,7 +586,7 @@ abstract contract DreamDexAdapter {
   /// @param marketId DreamDEX market identifier.
   /// @return record Normalized market record.
   function _readModuleMarket(address module_, bytes32 marketId)
-    private
+    internal
     view
     returns (ModuleMarket memory record)
   {

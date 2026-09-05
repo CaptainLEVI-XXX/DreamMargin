@@ -73,7 +73,7 @@ contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
     OpenAccounting memory accounting;
     accounting.generationKey = LibDreamMarginStorage.generationKey(params.key);
     GenerationConfig storage config = self.generations[accounting.generationKey];
-    _requireOpenGeneration(config, accounting.generationKey, params);
+    _requireOpenGeneration(self, config, accounting.generationKey, params);
     ValidatedGeneration memory generation =
       _validateGeneration(_moduleAddress(), params.key, params.outcomeIndex, true);
     _requireOpeningWindow(generation.expiry, config.risk.openingCutoff);
@@ -177,6 +177,7 @@ contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
       outcomeIndex: params.outcomeIndex,
       status: PositionStatus.ACTIVE
     });
+    self.ownerPositionIds[msg.sender].push(positionId);
     self.attributedShares[params.key.outcomeToken][params.key.outcomeId] += resultingShares;
     self.outcomeDebtShares[accounting.generationKey] += accounting.finalDebtShares;
     self.marketDebtShares[config.marketGroup] += accounting.finalDebtShares;
@@ -239,10 +240,12 @@ contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
   }
 
   /// @notice Requires an exact enabled controller record matching all opening parameters.
+  /// @param self Controller namespace containing reusable policy links.
   /// @param config Stored generation configuration.
   /// @param generationKey Derived generation identifier.
   /// @param params User-supplied opening parameters.
   function _requireOpenGeneration(
+    LibDreamMarginStorage.State storage self,
     GenerationConfig storage config,
     bytes32 generationKey,
     IDreamMarginController.OpenParams calldata params
@@ -252,6 +255,15 @@ contract PositionOpen is DreamDexAdapter, DreamMarginReentrancyGuard {
     }
     if (config.key.pool == address(0) || !config.enabled) {
       revert LibDreamMarginErrors.UnsupportedGeneration(generationKey);
+    }
+    bytes32 policyId = self.generationPolicies[generationKey];
+    if (policyId != bytes32(0)) {
+      if (self.seriesPolicies[policyId].frozen) {
+        revert LibDreamMarginErrors.SeriesPolicyFrozen(policyId);
+      }
+      if (!self.seriesPolicies[policyId].enabled) {
+        revert LibDreamMarginErrors.UnsupportedSeriesPolicy(policyId);
+      }
     }
     if (config.risk.outcomeIndex != params.outcomeIndex) {
       revert LibDreamMarginErrors.GenerationMismatch(

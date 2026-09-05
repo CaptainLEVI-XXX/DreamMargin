@@ -44,6 +44,9 @@ library LibDreamMarginConstants {
   /// @notice Largest bounded observation ring accepted by oracle configuration.
   uint16 internal constant MAX_OBSERVATIONS = 256;
 
+  /// @notice Largest owner-position page copied by one controller view.
+  uint256 internal constant MAX_POSITION_PAGE_SIZE = 100;
+
   // -------------------------------------------------------------------------
   // DreamDEX integration values
   // -------------------------------------------------------------------------

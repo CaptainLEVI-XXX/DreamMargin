@@ -11,7 +11,8 @@ import {
   GlobalRiskConfig,
   MarketKey,
   Position,
-  ProtocolMode
+  ProtocolMode,
+  SeriesPolicy
 } from "src/libs/dreammargin/LibDreamMarginStorage.sol";
 import {OracleConfig} from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.sol";
 
@@ -40,6 +41,32 @@ interface IDreamMarginController {
   /// @param generationKey Full generation identifier.
   /// @param caller Guardian or governance caller.
   event GenerationFrozen(bytes32 indexed generationKey, address indexed caller);
+
+  /// @notice Emitted when one reusable DreamDEX-origin policy is registered or replaced.
+  /// @param policyId Governance-selected policy identifier.
+  /// @param identity Hash of creator, venue, operator, and collateral.
+  /// @param enabled Whether matching generations may admit new risk.
+  /// @param frozen Whether the policy is emergency-frozen.
+  event SeriesPolicyUpdated(
+    bytes32 indexed policyId, bytes32 indexed identity, bool enabled, bool frozen
+  );
+
+  /// @notice Emitted when an emergency actor freezes one reusable series policy.
+  /// @param policyId Frozen policy identifier.
+  /// @param caller Guardian or governance caller.
+  event SeriesPolicyFrozen(bytes32 indexed policyId, address indexed caller);
+
+  /// @notice Emitted when a matching current generation is activated without governance.
+  /// @param generationKey Full activated generation identifier.
+  /// @param policyId Reusable policy that admitted the generation.
+  /// @param marketGroup Exposure bucket shared by both generation outcomes.
+  /// @param outcomeIndex Zero for YES or one for NO.
+  event SeriesGenerationActivated(
+    bytes32 indexed generationKey,
+    bytes32 indexed policyId,
+    bytes32 indexed marketGroup,
+    uint8 outcomeIndex
+  );
 
   /// @notice Emitted when exact execution payload is committed for delayed execution.
   /// @param changeId Caller-selected unique change identifier.
@@ -123,6 +150,16 @@ interface IDreamMarginController {
     OracleConfig calldata oracleConfig
   ) external;
 
+  /// @notice Schedules one reusable series-policy change as risk steward or governance.
+  /// @param changeId Unique pending change identifier.
+  /// @param policyId Governance-selected policy identifier.
+  /// @param policy Proposed DreamDEX-origin, risk, and oracle policy.
+  function scheduleSeriesPolicyChange(
+    bytes32 changeId,
+    bytes32 policyId,
+    SeriesPolicy calldata policy
+  ) external;
+
   /// @notice Cancels a pending delayed action as governance or guardian.
   /// @param changeId Pending change identifier.
   function cancelChange(bytes32 changeId) external;
@@ -134,6 +171,10 @@ interface IDreamMarginController {
   /// @notice Freezes new risk for one registered generation without delay.
   /// @param generationKey Registered generation identifier.
   function freezeGeneration(bytes32 generationKey) external;
+
+  /// @notice Freezes one series policy and every generation admitted through it.
+  /// @param policyId Registered series-policy identifier.
+  function freezeSeriesPolicy(bytes32 policyId) external;
 
   /// @notice Executes a committed complete role-bitmap replacement.
   /// @param changeId Scheduled change identifier.
@@ -157,6 +198,25 @@ interface IDreamMarginController {
     GenerationConfig calldata config,
     OracleConfig calldata oracleConfig
   ) external;
+
+  /// @notice Executes a committed reusable series-policy registration or replacement.
+  /// @param changeId Scheduled change identifier.
+  /// @param policyId Governance-selected policy identifier.
+  /// @param policy Replacement DreamDEX-origin, risk, and oracle policy.
+  function executeSeriesPolicyChange(
+    bytes32 changeId,
+    bytes32 policyId,
+    SeriesPolicy calldata policy
+  ) external;
+
+  /// @notice Permissionlessly activates one exact current outcome under a registered policy.
+  /// @param key Full current DreamDEX generation tuple.
+  /// @param outcomeIndex Zero for YES or one for NO.
+  /// @return generationKey Hash identifying the activated tuple.
+  /// @return policyId Reusable series policy that admitted the tuple.
+  function activateSeriesGeneration(MarketKey calldata key, uint8 outcomeIndex)
+    external
+    returns (bytes32 generationKey, bytes32 policyId);
 
   /// @notice Executes a committed restoration to a less restrictive protocol mode.
   /// @param changeId Scheduled change identifier.
@@ -417,6 +477,17 @@ interface IDreamMarginController {
   /// @return position Stored position state.
   function getPosition(uint256 positionId) external view returns (Position memory position);
 
+  /// @notice Returns a bounded page of IDs allocated to one immutable position owner.
+  /// @param owner Position owner queried.
+  /// @param offset Zero-based offset into the owner's opening-order list.
+  /// @param limit Maximum IDs requested, capped at one hundred.
+  /// @return ids Position IDs in ascending allocation order.
+  /// @return total Total positions ever opened by the owner.
+  function positionsOf(address owner, uint256 offset, uint256 limit)
+    external
+    view
+    returns (uint256[] memory ids, uint256 total);
+
   /// @notice Returns one registered generation configuration.
   /// @param generationKey Full market-generation key.
   /// @return config Registered generation state and risk bounds.
@@ -424,6 +495,22 @@ interface IDreamMarginController {
     external
     view
     returns (GenerationConfig memory config);
+
+  /// @notice Returns one reusable series policy.
+  /// @param policyId Governance-selected policy identifier.
+  /// @return policy Stored DreamDEX-origin, risk, and oracle policy.
+  function getSeriesPolicy(bytes32 policyId) external view returns (SeriesPolicy memory policy);
+
+  /// @notice Resolves the reusable policy for the module's current market record.
+  /// @param marketId DreamDEX market identifier.
+  /// @return policyId Matching policy identifier, or zero when none is registered.
+  /// @return eligible Whether identity, interval, and policy state currently admit activation.
+  function policyFor(bytes32 marketId) external view returns (bytes32 policyId, bool eligible);
+
+  /// @notice Returns the series policy that admitted an exact generation.
+  /// @param generationKey Full generation identifier.
+  /// @return policyId Linked policy identifier, or zero for manual registrations.
+  function policyForGeneration(bytes32 generationKey) external view returns (bytes32 policyId);
 
   /// @notice Returns the current protocol-wide operating mode.
   /// @return mode Current active, reduce-only, or paused mode.
