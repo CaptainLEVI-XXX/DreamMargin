@@ -45,6 +45,11 @@ describe("layout", () => {
     expect(ranges).toHaveTextContent("All");
   });
 
+  it("shows a live market countdown beside the detail heading", () => {
+    render(view());
+    expect(screen.getByLabelText("Market time remaining")).toHaveTextContent(/closes in/i);
+  });
+
   it("returns to the market list without using global navigation", async () => {
     const onBack = vi.fn();
     render(view({ onBack }));
@@ -101,12 +106,12 @@ describe("the tier row is the action", () => {
     expect(screen.getByRole("radio", { name: "2x" })).not.toBeChecked();
   });
 
-  it("counts confirmations for the current review stage", async () => {
+  it("does not expose wallet-step counting as product copy", async () => {
     render(view());
     await userEvent.click(screen.getByRole("radio", { name: "1x" }));
-    expect(screen.getByText("2 wallet confirmations")).toBeVisible();
+    expect(screen.queryByText(/wallet confirmations?/i)).toBeNull();
     await userEvent.click(screen.getByRole("radio", { name: "1.5x" }));
-    expect(screen.getByText("2 wallet confirmations")).toBeVisible();
+    expect(screen.queryByText(/wallet confirmations?/i)).toBeNull();
   });
 });
 
@@ -187,7 +192,6 @@ describe("direct collateral opening", () => {
     render(view({ balances: { ...EMPTY_BALANCES, yes: 100_000_000n } }));
     await userEvent.click(screen.getByRole("radio", { name: "1.5x" }));
     // The controller purchases the exact target from tUSDC; held outcomes are untouched.
-    expect(screen.getByText("2 wallet confirmations")).toBeVisible();
     expect(screen.getByRole("button", { name: /open 1\.5x position/i })).toBeVisible();
   });
 

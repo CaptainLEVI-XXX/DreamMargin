@@ -5,8 +5,8 @@ import type { Address } from "viem";
  *
  * frontend-spec §4.8: one application action starts the whole economic intent.
  * Where the wallet can execute an atomic batch, approval and action are one
- * decoded bundle; otherwise the orchestrator sequences them and discloses the
- * count before the first prompt. §17.2: fewer prompts come from reusing existing
+ * decoded bundle; otherwise the orchestrator sequences them and reports each
+ * transaction's progress inline. §17.2: fewer prompts come from reusing existing
  * allowances and batching, never from defaulting to unlimited approvals.
  */
 
@@ -128,11 +128,4 @@ export function readCapabilities(
  */
 export function canBatch(plan: CallPlan, capabilities: WalletCapabilities): boolean {
   return capabilities.atomicBatch && plan.calls.length > 1;
-}
-
-/** What to tell the user before the first wallet prompt. §4.9 */
-export function confirmationNotice(plan: CallPlan, capabilities: WalletCapabilities): string {
-  if (canBatch(plan, capabilities)) return "1 wallet confirmation";
-  const n = plan.sequentialConfirmations;
-  return n === 1 ? "1 wallet confirmation" : `${n} wallet confirmations`;
 }

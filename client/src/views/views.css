@@ -49,7 +49,6 @@
 
 .dm-owned,
 .dm-at-risk,
-.dm-confirmations,
 .dm-earn-note {
   font-size: var(--dm-size-13);
   color: var(--dm-text);
@@ -219,7 +218,56 @@
 }
 
 .dm-trade h1 {
+  margin: 0;
+}
+
+.dm-trade-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: calc(var(--dm-space) * 3);
   margin-bottom: calc(var(--dm-space) * 1.5);
+}
+
+.dm-trade-countdown {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 4px;
+  min-width: 210px;
+  padding: calc(var(--dm-space) * 1.25) calc(var(--dm-space) * 1.5);
+  border: 1px solid color-mix(in srgb, var(--dm-line) 76%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dm-panel-raised) 68%, var(--dm-ground));
+  text-align: right;
+}
+
+.dm-trade-countdown > span:first-child {
+  color: var(--dm-muted);
+  font-family: var(--dm-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.dm-trade-countdown .dm-value {
+  color: var(--dm-ink);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-13);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 680px) {
+  .dm-trade-heading {
+    display: grid;
+    gap: calc(var(--dm-space) * 1.5);
+  }
+
+  .dm-trade-countdown {
+    width: 100%;
+    min-width: 0;
+    text-align: left;
+  }
 }
 
 .dm-back {
@@ -361,6 +409,10 @@
 .dm-trade > .dm-card .dm-button-primary {
   width: 100%;
   margin-top: var(--dm-space);
+}
+
+.dm-trade > .dm-card .dm-button-control {
+  width: 100%;
 }
 
 .dm-trade-note {

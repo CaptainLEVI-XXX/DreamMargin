@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildCallPlan,
-  canBatch,
-  confirmationNotice,
-  readCapabilities,
-  type PlanInput,
-} from "./callPlan";
+import { buildCallPlan, canBatch, readCapabilities, type PlanInput } from "./callPlan";
 
 const CONTROLLER = "0x50B054bD4A891C44A66c86e8c82A45AE0630869c" as const;
 const COLLATERAL = "0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E" as const;
@@ -131,11 +125,5 @@ describe("batching decisions", () => {
 
   it("does not batch a single call", () => {
     expect(canBatch(single, { atomicBatch: true })).toBe(false);
-  });
-
-  it("promises one confirmation only when batching actually applies", () => {
-    expect(confirmationNotice(plan, { atomicBatch: true })).toBe("1 wallet confirmation");
-    expect(confirmationNotice(plan, { atomicBatch: false })).toBe("2 wallet confirmations");
-    expect(confirmationNotice(single, { atomicBatch: false })).toBe("1 wallet confirmation");
   });
 });

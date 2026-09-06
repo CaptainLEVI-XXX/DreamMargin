@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
+import { Countdown } from "../components/Countdown";
 import { LeverageTiers } from "../components/LeverageTiers";
 import { MarketChart } from "../components/MarketChart";
 import { SafetyBuffer } from "../components/SafetyBuffer";
@@ -51,8 +52,7 @@ type Props = {
  * The tier row chooses the economic action. At 1x the entered size is a normal
  * outcome purchase. Above 1x the entered size is the exact final position:
  * DreamMargin combines trader tUSDC with vault debt and buys the outcome in one
- * controller action. The confirmation count always describes the current
- * review stage.
+ * controller action.
  */
 export function TradeView({
   market,
@@ -121,8 +121,7 @@ export function TradeView({
           tickSize: 1_000n,
         });
 
-  // Preview only: the confirmation count and borrow figure do not depend on the
-  // deadline, so a placeholder keeps render pure.
+  // Preview values do not depend on the deadline, so a placeholder keeps render pure.
   const sequence = buildSequence(0n);
 
   const availability = availabilityFor({
@@ -175,7 +174,13 @@ export function TradeView({
             ← Markets
           </button>
         )}
-        <h1>{market.question}</h1>
+        <div className="dm-trade-heading">
+          <h1>{market.question}</h1>
+          <div className="dm-trade-countdown" aria-label="Market time remaining">
+            <span>Closes in</span>
+            <Countdown expiry={market.expiry} includeSeconds />
+          </div>
+        </div>
         <div className="dm-chart-range" role="group" aria-label="Chart range">
           {(Object.entries(CHART_RANGES) as [ChartRange, (typeof CHART_RANGES)[ChartRange]][]).map(
             ([range, option]) => (
@@ -362,14 +367,6 @@ export function TradeView({
             or choose 1x.
           </p>
         ) : null}
-
-        <p className="dm-confirmations">
-          {sequence === null
-            ? "Connect a wallet to continue"
-            : sequence.confirmations === 1
-              ? "1 wallet confirmation"
-              : `${sequence.confirmations} wallet confirmations`}
-        </p>
 
         {intent === null ? (
           <Button

@@ -10,7 +10,13 @@ import { Value } from "./Value";
  * minutes before expiry. It ticks because a static timestamp goes stale on
  * screen, and stops at zero rather than counting negative.
  */
-export function Countdown({ expiry }: { expiry: bigint }) {
+export function Countdown({
+  expiry,
+  includeSeconds = false,
+}: {
+  expiry: bigint;
+  includeSeconds?: boolean;
+}) {
   const [now, setNow] = useState(() => BigInt(Math.floor(Date.now() / 1000)));
 
   useEffect(() => {
@@ -23,7 +29,7 @@ export function Countdown({ expiry }: { expiry: bigint }) {
 
   return (
     <span className="dm-countdown">
-      <Value>{formatTimeLeft(left)}</Value>
+      <Value>{formatTimeLeft(left, includeSeconds)}</Value>
     </span>
   );
 }
