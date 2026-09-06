@@ -15,6 +15,8 @@ export type Balances = {
   collateral: bigint;
   /** Allowance from the wallet to the controller, for repay and close. */
   collateralAllowance: bigint;
+  /** Allowance from the wallet to the ERC-4626 vault, for deposits. */
+  vaultAllowance: bigint;
   /** Vault shares held. */
   vaultShares: bigint;
   yes: bigint;
@@ -27,6 +29,7 @@ export type Balances = {
 export const EMPTY_BALANCES: Balances = {
   collateral: 0n,
   collateralAllowance: 0n,
+  vaultAllowance: 0n,
   vaultShares: 0n,
   yes: 0n,
   no: 0n,
@@ -37,9 +40,8 @@ export const EMPTY_BALANCES: Balances = {
 /**
  * Read every balance the trader flow needs, batched through multicall3.
  *
- * The outcome allowance is what decides whether the open flow needs one wallet
- * confirmation or two, so it is read alongside the balances rather than
- * separately at signing time.
+ * Outcome and collateral allowances decide whether an approval is required, so
+ * they are read alongside balances rather than separately at signing time.
  */
 export async function readBalances(
   client: PublicClient,
@@ -52,51 +54,74 @@ export async function readBalances(
   const controller = DEPLOYMENT.controller as Address;
   const vault = DEPLOYMENT.vault as Address;
 
-  const [collateral, collateralAllowance, vaultShares, yes, no, yesAllowance, noAllowance] =
-    await Promise.all([
-      client.readContract({
-        address: collateralToken,
-        abi: erc20Abi,
-        functionName: "balanceOf",
-        args: [owner],
-      }),
-      client.readContract({
-        address: collateralToken,
-        abi: erc20Abi,
-        functionName: "allowance",
-        args: [owner, controller],
-      }),
-      client.readContract({
-        address: vault,
-        abi: erc20Abi,
-        functionName: "balanceOf",
-        args: [owner],
-      }),
-      client.readContract({
-        address: outcomeToken,
-        abi: erc6909Abi,
-        functionName: "balanceOf",
-        args: [owner, yesId],
-      }) as Promise<bigint>,
-      client.readContract({
-        address: outcomeToken,
-        abi: erc6909Abi,
-        functionName: "balanceOf",
-        args: [owner, noId],
-      }) as Promise<bigint>,
-      client.readContract({
-        address: outcomeToken,
-        abi: erc6909Abi,
-        functionName: "allowance",
-        args: [owner, controller, yesId],
-      }) as Promise<bigint>,
-      client.readContract({
-        address: outcomeToken,
-        abi: erc6909Abi,
-        functionName: "allowance",
-        args: [owner, controller, noId],
-      }) as Promise<bigint>,
-    ]);
+  const [
+    collateral,
+    collateralAllowance,
+    vaultAllowance,
+    vaultShares,
+    yes,
+    no,
+    yesAllowance,
+    noAllowance,
+  ] = await Promise.all([
+    client.readContract({
+      address: collateralToken,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [owner],
+    }),
+    client.readContract({
+      address: collateralToken,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [owner, controller],
+    }),
+    client.readContract({
+      address: collateralToken,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [owner, vault],
+    }),
+    client.readContract({
+      address: vault,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [owner],
+    }),
+    client.readContract({
+      address: outcomeToken,
+      abi: erc6909Abi,
+      functionName: "balanceOf",
+      args: [owner, yesId],
+    }) as Promise<bigint>,
+    client.readContract({
+      address: outcomeToken,
+      abi: erc6909Abi,
+      functionName: "balanceOf",
+      args: [owner, noId],
+    }) as Promise<bigint>,
+    client.readContract({
+      address: outcomeToken,
+      abi: erc6909Abi,
+      functionName: "allowance",
+      args: [owner, controller, yesId],
+    }) as Promise<bigint>,
+    client.readContract({
+      address: outcomeToken,
+      abi: erc6909Abi,
+      functionName: "allowance",
+      args: [owner, controller, noId],
+    }) as Promise<bigint>,
+  ]);
 
-  return { collateral, collateralAllowance, vaultShares, yes, no, yesAllowance, noAllowance };
+  return {
+    collateral,
+    collateralAllowance,
+    vaultAllowance,
+    vaultShares,
+    yes,
+    no,
+    yesAllowance,
+    noAllowance,
+  };
 }

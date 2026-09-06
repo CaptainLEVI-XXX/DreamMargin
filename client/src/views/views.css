@@ -62,6 +62,60 @@
   margin-top: calc(var(--dm-space) * 3);
 }
 
+.dm-vault-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin-bottom: calc(var(--dm-space) * 2);
+  padding: 5px;
+  border: 1px solid #2c2b27;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dm-ground) 74%, var(--dm-panel));
+}
+
+.dm-vault-mode button {
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: var(--dm-radius);
+  background: var(--dm-panel-raised);
+  color: var(--dm-text);
+  font-family: var(--dm-font-mono);
+  cursor: pointer;
+}
+
+.dm-vault-mode button[data-selected] {
+  border-color: var(--dm-accent);
+  background: var(--dm-accent-tint);
+  color: var(--dm-ink);
+}
+
+.dm-vault-amount {
+  margin-top: calc(var(--dm-space) * 2);
+}
+
+.dm-vault-max {
+  display: block;
+  margin: calc(var(--dm-space) * -1) 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--dm-text);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  cursor: pointer;
+}
+
+.dm-vault-max:hover {
+  color: var(--dm-ink);
+}
+
+.dm-earn .dm-button-primary {
+  width: 100%;
+}
+
+.dm-earn .dm-button-control {
+  width: 100%;
+}
+
 @media (min-width: 1024px) {
   .dm-earn-grid {
     grid-template-columns: 1fr var(--dm-panel-width);

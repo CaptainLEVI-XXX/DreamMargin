@@ -162,7 +162,14 @@ export default function App() {
           error={positionsError}
         />
       )}
-      {route === "earn" && <EarnView vault={snapshot.vault} />}
+      {route === "earn" && (
+        <EarnView
+          vault={snapshot.vault}
+          account={account}
+          balances={balances}
+          onSettled={refreshAll}
+        />
+      )}
     </AppShell>
   );
 }
