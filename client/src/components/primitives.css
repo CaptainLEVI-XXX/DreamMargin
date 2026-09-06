@@ -44,6 +44,14 @@
   text-align: right;
 }
 
+.dm-button-control {
+  display: inline-flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  vertical-align: top;
+}
+
 .dm-button {
   min-height: 44px;
   font-family: var(--dm-font-brand);
@@ -102,7 +110,10 @@
 
 .dm-button-reason {
   display: block;
+  max-width: 22rem;
   font-size: var(--dm-size-11);
+  font-family: var(--dm-font-mono);
+  line-height: 1.45;
   color: var(--dm-text);
-  margin-top: var(--dm-space);
+  margin: var(--dm-space) 2px 0;
 }

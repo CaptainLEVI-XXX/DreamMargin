@@ -1,5 +1,6 @@
 import { formatCents, formatUnits } from "../domain/amounts";
 import type { PositionView } from "../domain/models";
+import { planDebtClearingDeleverage, repaymentLimit } from "../domain/positionManagement";
 import { availabilityFor, PositionStatus, type ProtocolModeValue } from "../domain/protocol";
 import { Button } from "./Button";
 import { Card } from "./Card";
@@ -13,6 +14,7 @@ import {
   deleverageIntent,
   repayIntent,
   settleIntent,
+  withdrawCollateralIntent,
 } from "../transactions/actions";
 import { useIntentRunner } from "../transactions/useIntentRunner";
 import type { WalletCapabilities } from "../transactions/callPlan";
@@ -22,7 +24,7 @@ type Props = {
   mode: ProtocolModeValue;
   primary: boolean;
   account?: `0x${string}` | null;
-  /** Collateral allowance to the controller, deciding the confirmation count. */
+  /** Collateral allowance to the controller, deciding whether approval is required. */
   collateralAllowance?: bigint;
   outcomeAllowance?: bigint;
   capabilities?: WalletCapabilities;
@@ -55,6 +57,10 @@ export function PositionCard({
     beforeReduceOnlyCutoff: true,
   });
   const resolved = position.status === PositionStatus.Resolved;
+  const side = position.outcomeIndex === 0 ? "YES" : "NO";
+  const walletOutcomeShares = position.outcomeIndex === 0 ? market.ownedYes : market.ownedNo;
+  const maximumRepayment = repaymentLimit(position.debtAssets);
+  const deleveragePlan = planDebtClearingDeleverage(position);
 
   // Every action signs against this exact position id, which the wallet must own.
   const actionBlocked = account === null ? "Connect a wallet to act on this position" : undefined;
@@ -72,7 +78,9 @@ export function PositionCard({
       <dl className="dm-position-facts">
         <dt>Shares</dt>
         <dd>
-          <Value>{formatUnits(position.shares, decimals)} YES</Value>
+          <Value>
+            {formatUnits(position.shares, decimals)} {side}
+          </Value>
         </dd>
         <dt>Outcome market value</dt>
         <dd>
@@ -111,6 +119,15 @@ export function PositionCard({
           >
             Settle position
           </Button>
+        ) : position.debtAssets === 0n ? (
+          <Button
+            variant={primary ? "primary" : "secondary"}
+            disabled={!availability.canClose || !usable}
+            disabledReason={actionBlocked}
+            onClick={() => run(withdrawCollateralIntent(position.positionId, position.shares))}
+          >
+            Withdraw shares
+          </Button>
         ) : (
           <>
             <Button
@@ -118,20 +135,25 @@ export function PositionCard({
               disabled={!availability.canRepay || !usable}
               disabledReason={actionBlocked}
               onClick={() =>
-                run(repayIntent(position.positionId, position.debtAssets, collateralAllowance))
+                run(repayIntent(position.positionId, maximumRepayment, collateralAllowance))
               }
             >
               Repay
             </Button>
             <Button
               variant="secondary"
-              disabled={!availability.canAddCollateral || !usable}
-              disabledReason={actionBlocked}
+              disabled={!availability.canAddCollateral || !usable || walletOutcomeShares === 0n}
+              disabledReason={
+                actionBlocked ??
+                (walletOutcomeShares === 0n
+                  ? `No ${side} shares are available in this wallet`
+                  : undefined)
+              }
               onClick={() =>
                 run(
                   addCollateralIntent(
                     position.positionId,
-                    market.ownedYes,
+                    walletOutcomeShares,
                     market.key.outcomeId,
                     outcomeAllowance,
                   ),
@@ -142,30 +164,28 @@ export function PositionCard({
             </Button>
             <Button
               variant="secondary"
-              disabled={!availability.canDeleverage || !usable}
+              disabled={!availability.canDeleverage || !usable || !deleveragePlan.ready}
               disabledReason={
                 actionBlocked ??
-                (availability.canDeleverage ? undefined : "Past the reduction cutoff")
+                (availability.canDeleverage
+                  ? deleveragePlan.ready
+                    ? undefined
+                    : deleveragePlan.reason
+                  : "Past the reduction cutoff")
               }
-              onClick={() =>
+              onClick={() => {
+                if (!deleveragePlan.ready) return;
                 run(
                   deleverageIntent({
                     positionId: position.positionId,
-                    sharesToSell: position.shares / 4n,
-                    // Bounded by the conservative mark, not the visible price.
-                    minCollateralOut:
-                      ((position.shares / 4n) *
-                        (position.outcomeIndex === 0 ? market.riskMark : market.noRiskMark)) /
-                      market.oneCollateral,
-                    limitPrice:
-                      position.outcomeIndex === 0
-                        ? market.riskMark
-                        : market.oneCollateral - market.noRiskMark,
-                    deadlineSeconds: BigInt(Math.floor(Date.now() / 1000) + 60),
+                    sharesToSell: deleveragePlan.sharesToSell,
+                    minCollateralOut: deleveragePlan.minCollateralOut,
+                    limitPrice: deleveragePlan.limitPrice,
+                    deadlineSeconds: BigInt(Math.floor(Date.now() / 1000) + 120),
                     lotSize: 1_000n,
                   }),
-                )
-              }
+                );
+              }}
             >
               Deleverage
             </Button>
@@ -175,11 +195,7 @@ export function PositionCard({
               disabledReason={actionBlocked}
               onClick={() =>
                 run(
-                  closeToOutcomeIntent(
-                    position.positionId,
-                    position.debtAssets,
-                    collateralAllowance,
-                  ),
+                  closeToOutcomeIntent(position.positionId, maximumRepayment, collateralAllowance),
                 )
               }
             >

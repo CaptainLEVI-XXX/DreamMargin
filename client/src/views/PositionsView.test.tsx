@@ -100,4 +100,23 @@ describe("actions need a real, owned position", () => {
     expect(screen.getByRole("button", { name: "Add collateral" })).toBeEnabled();
     expect(screen.getByRole("button", { name: /repay and withdraw/i })).toBeEnabled();
   });
+
+  it("does not submit zero when the wallet has no matching outcome shares", () => {
+    const position = SCENARIOS.healthy.positions[0];
+    const snapshot = {
+      ...SCENARIOS.healthy,
+      positions: [
+        {
+          ...position,
+          market: { ...position.market, ownedYes: 0n },
+        },
+      ],
+    };
+    render(<PositionsView snapshot={snapshot} account={ACCOUNT} />);
+    const action = screen.getByRole("button", { name: "Add collateral" });
+    const reason = screen.getByText(/no yes shares are available/i);
+    expect(action).toBeDisabled();
+    expect(reason).toBeVisible();
+    expect(action.closest(".dm-button-control")).toContainElement(reason);
+  });
 });

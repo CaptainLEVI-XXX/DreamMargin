@@ -239,6 +239,7 @@ describe("position lifecycle bounds", () => {
     });
     expect(intent.plan.calls).toHaveLength(1);
     expect(intent.reviewed.side).toBe("sell");
+    expect((intent.action.args[0] as { orderType: number }).orderType).toBe(OrderType.Fok);
   });
 
   it("closes to outcome without a sale, so it sets no price bound", () => {

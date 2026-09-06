@@ -24,7 +24,7 @@ export function Button({ variant, children, disabled, disabledReason, ...rest }:
   const showReason = disabled === true && disabledReason !== undefined;
 
   return (
-    <>
+    <span className="dm-button-control">
       <button
         className={`dm-button dm-button-${variant}`}
         data-accent-fill={variant === "primary" ? "" : undefined}
@@ -39,6 +39,6 @@ export function Button({ variant, children, disabled, disabledReason, ...rest }:
           {disabledReason}
         </span>
       ) : null}
-    </>
+    </span>
   );
 }

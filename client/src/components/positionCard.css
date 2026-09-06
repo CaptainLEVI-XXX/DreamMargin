@@ -43,10 +43,32 @@
 }
 
 .dm-position-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--dm-space);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+  gap: calc(var(--dm-space) * 1.25);
   margin-top: calc(var(--dm-space) * 2);
+}
+
+.dm-position-actions .dm-button-control,
+.dm-position-actions .dm-button {
+  width: 100%;
+}
+
+.dm-position-actions .dm-button {
+  min-height: 50px;
+}
+
+@media (max-width: 900px) {
+  .dm-position-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .dm-position-actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 .dm-empty-note {

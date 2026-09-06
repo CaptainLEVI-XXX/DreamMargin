@@ -321,7 +321,7 @@ export function withdrawCollateralIntent(positionId: bigint, shares: bigint): In
   };
 }
 
-/** Sell shares to reduce debt. The controller already holds the shares. */
+/** Sell enough shares atomically to reduce debt. The controller already holds them. */
 export function deleverageIntent(input: {
   positionId: bigint;
   sharesToSell: bigint;
@@ -349,7 +349,7 @@ export function deleverageIntent(input: {
           sharesToSell: shares,
           minCollateralOut: input.minCollateralOut,
           limitPrice: input.limitPrice,
-          orderType: OrderType.Ioc,
+          orderType: OrderType.Fok,
           deadline: input.deadlineSeconds,
         },
       ],
