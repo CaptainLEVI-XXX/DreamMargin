@@ -9,7 +9,6 @@ import "./components/marketCard.css";
 import "./components/positionCard.css";
 import "./components/leverageTiers.css";
 import "./components/protocolAlert.css";
-import "./components/freshness.css";
 import "./components/transactionProgress.css";
 import "./components/marketChart.css";
 import "./views/views.css";
