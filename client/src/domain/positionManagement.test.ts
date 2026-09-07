@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { SCENARIOS } from "../fixtures/scenarios";
-import { planDebtClearingDeleverage, repaymentLimit } from "./positionManagement";
+import {
+  planDebtClearingDeleverage,
+  planFullCloseToCollateral,
+  repaymentLimit,
+} from "./positionManagement";
 
 const UNIT = 1_000_000n;
 
@@ -39,6 +43,41 @@ describe("position management bounds", () => {
   it("refuses a deleverage when visible liquidity cannot clear the debt", () => {
     const template = SCENARIOS.healthy.positions[0];
     const plan = planDebtClearingDeleverage({
+      ...template,
+      market: { ...template.market, book: undefined },
+    });
+    expect(plan).toMatchObject({ ready: false, reason: expect.stringMatching(/liquidity/i) });
+  });
+
+  it("quotes selling the whole position, repaying debt, and returning tUSDC", () => {
+    const template = SCENARIOS.healthy.positions[0];
+    const position = {
+      ...template,
+      shares: 100n * UNIT,
+      debtAssets: 30n * UNIT,
+      market: {
+        ...template.market,
+        book: {
+          yesBids: [{ price: 550_000n, quantity: 500n * UNIT }],
+          yesAsks: [],
+          noBids: [],
+          noAsks: [],
+        },
+      },
+    };
+
+    expect(planFullCloseToCollateral(position)).toEqual({
+      ready: true,
+      minCollateralOut: 55n * UNIT,
+      maxRepayAssets: 0n,
+      limitPrice: 550_000n,
+      estimatedOwnerAssets: 25n * UNIT,
+    });
+  });
+
+  it("refuses a cash close when the whole position cannot be sold", () => {
+    const template = SCENARIOS.healthy.positions[0];
+    const plan = planFullCloseToCollateral({
       ...template,
       market: { ...template.market, book: undefined },
     });

@@ -1,6 +1,10 @@
 import { formatCents, formatUnits } from "../domain/amounts";
 import type { PositionView } from "../domain/models";
-import { planDebtClearingDeleverage, repaymentLimit } from "../domain/positionManagement";
+import {
+  planDebtClearingDeleverage,
+  planFullCloseToCollateral,
+  repaymentLimit,
+} from "../domain/positionManagement";
 import { availabilityFor, PositionStatus, type ProtocolModeValue } from "../domain/protocol";
 import { Button } from "./Button";
 import { Card } from "./Card";
@@ -10,6 +14,7 @@ import { Value } from "./Value";
 
 import {
   addCollateralIntent,
+  closeToCollateralIntent,
   closeToOutcomeIntent,
   deleverageIntent,
   repayIntent,
@@ -61,6 +66,7 @@ export function PositionCard({
   const walletOutcomeShares = position.outcomeIndex === 0 ? market.ownedYes : market.ownedNo;
   const maximumRepayment = repaymentLimit(position.debtAssets);
   const deleveragePlan = planDebtClearingDeleverage(position);
+  const fullClosePlan = planFullCloseToCollateral(position);
 
   // Every action signs against this exact position id, which the wallet must own.
   const actionBlocked = account === null ? "Connect a wallet to act on this position" : undefined;
@@ -131,7 +137,34 @@ export function PositionCard({
         ) : (
           <>
             <Button
-              variant={primary ? "primary" : "secondary"}
+              variant={primary && fullClosePlan.ready ? "primary" : "secondary"}
+              disabled={!availability.canClose || !usable || !fullClosePlan.ready}
+              disabledReason={
+                actionBlocked ??
+                (availability.canClose
+                  ? fullClosePlan.ready
+                    ? undefined
+                    : fullClosePlan.reason
+                  : "This position cannot be closed right now")
+              }
+              onClick={() => {
+                if (!fullClosePlan.ready) return;
+                run(
+                  closeToCollateralIntent({
+                    positionId: position.positionId,
+                    maxRepayAssets: fullClosePlan.maxRepayAssets,
+                    minCollateralOut: fullClosePlan.minCollateralOut,
+                    limitPrice: fullClosePlan.limitPrice,
+                    deadlineSeconds: BigInt(Math.floor(Date.now() / 1000) + 120),
+                    allowance: collateralAllowance,
+                  }),
+                );
+              }}
+            >
+              Sell and close to tUSDC
+            </Button>
+            <Button
+              variant={primary && !fullClosePlan.ready ? "primary" : "secondary"}
               disabled={!availability.canRepay || !usable}
               disabledReason={actionBlocked}
               onClick={() =>
@@ -199,7 +232,7 @@ export function PositionCard({
                 )
               }
             >
-              Repay and withdraw
+              Repay and withdraw {side} shares
             </Button>
           </>
         )}
