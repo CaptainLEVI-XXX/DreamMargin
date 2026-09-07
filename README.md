@@ -17,7 +17,7 @@ DreamMargin does not create synthetic markets, discount outcome shares, or
 decide event results. DreamDEX continues to own trading, expiry, resolution,
 and redemption. DreamMargin provides the financing and risk layer around it.
 
-## Why Prediction Markets Need Capital Efficiency
+## Why DreamDEX Event Contracts Need Capital Efficiency
 
 A trader with 50 tUSDC can normally spend at most 50 tUSDC on a forecast. With
 1.5x leverage, the same contribution can target approximately 75 tUSDC of
