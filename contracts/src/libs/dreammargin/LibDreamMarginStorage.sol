@@ -123,6 +123,44 @@ struct GenerationConfig {
   bool frozen;
 }
 
+/// @notice Keyless observation template applied when a series generation is activated.
+/// @param minAge Minimum mature-window age in seconds.
+/// @param updateInterval Minimum seconds between accepted observations.
+/// @param staleAfter Maximum age of the newest observation in seconds.
+/// @param depthQuantity Outcome quantity walked when producing depth-aware marks.
+/// @param maxObservations Capacity of the circular observation ring.
+/// @param maxBookLevels Maximum levels walked from either side of the book.
+struct SeriesOracleConfig {
+  uint40 minAge;
+  uint40 updateInterval;
+  uint40 staleAfter;
+  uint128 depthQuantity;
+  uint16 maxObservations;
+  uint16 maxBookLevels;
+}
+
+/// @notice Reusable admission policy for generations produced by one trusted DreamDEX origin.
+/// @param creator Market creator authorized to roll matching generations.
+/// @param originVenueId DreamDEX venue identifier required on every matching market.
+/// @param originOperatorId DreamDEX operator identifier required on every matching market.
+/// @param collateral Collateral token required on every matching market.
+/// @param minIntervalSec Shortest admitted interval from trading start to expiry.
+/// @param risk Symmetric risk template; `outcomeIndex` must be zero and is derived on activation.
+/// @param oracle Keyless observation policy copied into each activated outcome generation.
+/// @param enabled Whether matching generations may be activated and opened.
+/// @param frozen Whether emergency governance has stopped this policy and all linked generations.
+struct SeriesPolicy {
+  address creator;
+  bytes32 originVenueId;
+  uint32 originOperatorId;
+  address collateral;
+  uint64 minIntervalSec;
+  RiskConfig risk;
+  SeriesOracleConfig oracle;
+  bool enabled;
+  bool frozen;
+}
+
 /// @notice Protocol-wide risk bounds not specific to a market generation.
 /// @param maxDebtGlobal Aggregate performing debt ceiling in collateral native units.
 /// @param maxDailyRealizedLoss Loss threshold that permissionlessly activates reduce-only mode.
@@ -178,6 +216,10 @@ library LibDreamMarginStorage {
   /// @param reduceOnlyTriggeredAt Timestamp of the latest loss-triggered reduce-only transition.
   /// @param mode Protocol-wide availability state.
   /// @param initialized Whether controller initialization has completed.
+  /// @param ownerPositionIds Position IDs allocated to each immutable position owner.
+  /// @param seriesPolicies Reusable policies keyed by governance-selected identifiers.
+  /// @param policyIdsByIdentity Policy identifiers keyed by creator, venue, operator, and collateral.
+  /// @param generationPolicies Series policy that permissionlessly admitted each generation.
   struct State {
     mapping(uint256 positionId => Position position) positions;
     mapping(bytes32 generationKey => GenerationConfig config) generations;
@@ -196,6 +238,10 @@ library LibDreamMarginStorage {
     uint40 reduceOnlyTriggeredAt;
     ProtocolMode mode;
     bool initialized;
+    mapping(address owner => uint256[] positionIds) ownerPositionIds;
+    mapping(bytes32 policyId => SeriesPolicy policy) seriesPolicies;
+    mapping(bytes32 identity => bytes32 policyId) policyIdsByIdentity;
+    mapping(bytes32 generationKey => bytes32 policyId) generationPolicies;
   }
 
   /// @notice Returns the controller state stored at its ERC-7201 namespace.

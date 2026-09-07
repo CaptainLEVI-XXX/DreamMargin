@@ -1,0 +1,112 @@
+.dm-chart {
+  margin: 0 0 calc(var(--dm-space) * 2);
+  border: 1px solid var(--dm-line);
+  border-radius: var(--dm-radius-large);
+  background: var(--dm-panel);
+  padding: calc(var(--dm-space) * 2);
+}
+
+.dm-chart-range {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+  margin: calc(var(--dm-space) * -0.5) 0 var(--dm-space);
+}
+
+.dm-chart-range button {
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: var(--dm-text);
+  padding: 4px 7px;
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  cursor: pointer;
+}
+
+.dm-chart-range button:hover,
+.dm-chart-range button[data-selected] {
+  color: var(--dm-ink);
+  border-bottom-color: var(--dm-accent);
+}
+
+.dm-chart-scrub {
+  color: var(--dm-text);
+}
+
+.dm-chart-head,
+.dm-chart-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--dm-space) * 2);
+  font-size: var(--dm-size-11);
+  font-family: var(--dm-font-mono);
+  color: var(--dm-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.dm-chart-head {
+  margin-bottom: var(--dm-space);
+}
+
+.dm-chart-head > span:first-child {
+  color: var(--dm-ink-soft);
+}
+
+.dm-chart-foot {
+  margin-top: var(--dm-space);
+}
+
+/* Green and red mean value movement here, which §18.3 permits. */
+.dm-chart-line {
+  stroke: var(--dm-down);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.dm-chart-line[data-up="true"] {
+  stroke: var(--dm-up);
+}
+
+.dm-chart-strike {
+  stroke: var(--dm-text);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.dm-chart-verdict {
+  color: var(--dm-down);
+}
+
+.dm-chart-verdict[data-above="true"] {
+  color: var(--dm-up);
+}
+
+.dm-chart-empty {
+  color: var(--dm-text);
+  font-size: var(--dm-size-13);
+}
+
+.dm-chart-canvas {
+  width: 100%;
+}
+
+.dm-chart-canvas canvas {
+  display: block;
+}
+
+@media (max-width: 640px) {
+  .dm-chart {
+    padding: var(--dm-space);
+  }
+
+  .dm-chart-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .dm-chart-foot {
+    min-height: 2.5em;
+  }
+}

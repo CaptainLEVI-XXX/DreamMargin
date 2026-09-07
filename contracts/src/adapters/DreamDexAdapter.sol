@@ -10,6 +10,7 @@ import {IDreamDexBinaryMarket} from "src/interfaces/integrations/IDreamDexBinary
 import {IDreamDexBinaryModule} from "src/interfaces/integrations/IDreamDexBinaryModule.sol";
 import {IDreamDexBinaryPool} from "src/interfaces/integrations/IDreamDexBinaryPool.sol";
 import {IDreamDexBinarySettlement} from "src/interfaces/integrations/IDreamDexBinarySettlement.sol";
+import {IDreamDexMarkOracle} from "src/interfaces/dreammargin/IDreamDexMarkOracle.sol";
 import {IERC20Minimal} from "src/interfaces/integrations/IERC20Minimal.sol";
 import {IERC6909} from "src/interfaces/integrations/IERC6909.sol";
 
@@ -23,6 +24,15 @@ import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 /// @notice Stateless internal DreamDEX integration composed into the controller.
 abstract contract DreamDexAdapter {
   using SafeTransferLib for address;
+
+  /// @notice Refreshes a generation mark when its observation interval has elapsed.
+  /// @param oracle_ Statically bound DreamMargin mark oracle.
+  /// @param generationKey Full immutable generation identifier.
+  function _refreshOracleIfDue(address oracle_, bytes32 generationKey) internal {
+    // The oracle skips only an early sample and still fails closed on invalid depth or identity.
+    // forge-lint: disable-next-line(unused-return)
+    IDreamDexMarkOracle(oracle_).observeIfDue(generationKey);
+  }
 
   /// @notice Exact revert selector used by DreamDEX when an order is not active.
   /// @dev Truncating the hash to four bytes is the ABI definition of an error selector.
@@ -586,7 +596,7 @@ abstract contract DreamDexAdapter {
   /// @param marketId DreamDEX market identifier.
   /// @return record Normalized market record.
   function _readModuleMarket(address module_, bytes32 marketId)
-    private
+    internal
     view
     returns (ModuleMarket memory record)
   {

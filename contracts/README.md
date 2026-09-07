@@ -56,6 +56,55 @@ FOUNDRY_PROFILE=fork forge test -vv
 The public Shannon RPC is the default. Override it locally when necessary; do
 not commit provider credentials or deployment keys.
 
+## Shannon Frontend Deployment
+
+The integration target is two dedicated DreamDEX markets, BTC and ETH, both
+expiring on 19 October 2026. Each has a static 0.45/0.55 two-sided bootstrap
+book, and the DreamMargin vault retains 500 tUSDC of immediately available
+liquidity. The complete machine-readable address and generation map is:
+
+```text
+deployments/shannon-frontend.json
+```
+
+The deployment does not require a backend keeper. Somnia native Reactivity
+subscribes directly to each pool and invokes `DreamMarginReactiveObserver` when
+that pool changes. A user's normal DreamDEX trade therefore refreshes both
+outcome marks before the subsequent leverage transaction. Quiet books are
+allowed to become stale rather than pretending an old value is current; the
+frontend should detect `generationState().ring.newestTimestamp + staleAfter`
+and expose a permissionless `observe(generationKey)` refresh if the user already
+holds shares and has not just traded.
+
+The reproducible one-time setup is:
+
+```sh
+./script/deploy-demo-markets.sh create
+./script/deploy-demo-markets.sh schedule
+./script/deploy-demo-markets.sh execute
+./script/seed-demo-markets.sh
+./script/setup-demo-reactivity.sh
+./script/bootstrap-demo-oracle.sh
+```
+
+Run the complete live lifecycle check against the dedicated markets with:
+
+```sh
+SELECTION=deployments/shannon-demo-selected-markets.json \
+CONFIGURATION=deployments/shannon-demo-markets.json \
+SMOKE_OUTPUT=deployments/shannon-demo-smoke.json \
+./script/smoke-shannon.sh
+```
+
+That check has exercised deposit, outcome funding, leveraged open, partial
+repayment, full close, debt-free accounting, and synchronous LP redemption on
+both markets. `seed-demo-markets.sh` is idempotent and restores the retained
+frontend vault target without duplicating an existing two-sided book.
+
+Reusable series policies remain available for future products. They remove
+per-roll governance, but a newly rolled generation must still be activated
+permissionlessly and its oracle window bootstrapped before leverage opens.
+
 ## Repository Layout
 
 ```text

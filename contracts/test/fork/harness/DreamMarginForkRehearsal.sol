@@ -213,23 +213,20 @@ contract DreamMarginForkRehearsal {
 
     collateral.mint(address(pool), 1_000 * unit);
     outcome.mint(address(pool), source.yesId, 1_000 * unit);
-    outcome.mint(_TRADER, source.yesId, 20 * unit);
     collateral.mint(_TRADER, 200 * unit);
     _VM.startPrank(_TRADER);
-    outcome.approve(address(controller), source.yesId, type(uint256).max);
     collateral.approve(address(controller), type(uint256).max);
-    (uint256 positionId,,) = controller.openPosition(
-      IDreamMarginController.OpenParams({
+    (uint256 positionId,,,) = controller.openFromCollateral(
+      IDreamMarginController.OpenFromCollateralParams({
         key: key,
         outcomeIndex: 0,
-        initialShares: 20 * unit,
+        targetShares: 40 * unit,
         leverageBps: 18_000,
-        maxCollateralIn: 25 * unit,
-        minSharesOut: unit,
+        maxUserCollateralIn: 25 * unit,
+        maxDebt: 25 * unit,
         // The local model supplies a deterministic fill at the pinned conservative bid. The
         // deployed ask remains recorded in the snapshot, but is not claimed as a live fill.
         limitPrice: source.bestBid.price,
-        orderType: LibDreamMarginConstants.ORDER_TYPE_IOC,
         deadline: block.timestamp + 600
       })
     );

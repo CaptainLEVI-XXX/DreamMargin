@@ -1,0 +1,16 @@
+{
+  "schema": "dreammargin.shannon-observations.v1",
+  "chainId": 50312,
+  "round": 4,
+  "observedAtBlock": 480032676,
+  "observedAtTimestamp": 1788576391,
+  "oracle": "0x9Dc09C580C8b5E1cc3Ba96135a99d50b2c0406e9",
+  "btcYesGenerationKey": "0x26d84ba32cf58cf15aeb7904cd8b120eef92824bd9aa363d091fe3b68ad81ebd",
+  "btcNoGenerationKey": "0x80fc98b1d401834441347604ee42bc028554b6414119f3f799d77c59a6979224",
+  "ethYesGenerationKey": "0x35f65a6bf318a5cb403b467e397fab9a0f2d3a0239551e466ec4f39050a9abdf",
+  "ethNoGenerationKey": "0xa728121e5141ee0c2a66e15da13f3bbcf73b63c3112ce60ea997c0093a93e82e",
+  "btcYesTransaction": "0x13130a4feee93a0f78fdb042c8a5f2e17d48c6629b7ab7bfcba2449d0dc932a9",
+  "btcNoTransaction": "0x15beec84afe52f8175c0447c01b5f9a367c429d53ec54d402c5011fd16044555",
+  "ethYesTransaction": "0xac0b750a1979acf0c0e9d8a21b9a130b4c671d8fc8b24684796cb7bf663b5ccb",
+  "ethNoTransaction": "0x9108d6c1a879664b98fd129f4345a223fd65b3f99a36a702fd53761bd26c4a6e"
+}

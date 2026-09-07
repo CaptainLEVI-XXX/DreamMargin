@@ -16,7 +16,7 @@ import {IDreamDexBinaryPool} from "src/interfaces/integrations/IDreamDexBinaryPo
 
 import {LibDreamMarginConstants} from "src/libs/dreammargin/LibDreamMarginConstants.sol";
 import {LibDreamMarginErrors} from "src/libs/dreammargin/LibDreamMarginErrors.sol";
-import {OracleConfig} from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.sol";
+import {ObservationRing, OracleConfig} from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.sol";
 import {
   GenerationConfig,
   GlobalRiskConfig,
@@ -24,7 +24,9 @@ import {
   Position,
   PositionStatus,
   ProtocolMode,
-  RiskConfig
+  RiskConfig,
+  SeriesOracleConfig,
+  SeriesPolicy
 } from "src/libs/dreammargin/LibDreamMarginStorage.sol";
 import {DreamDexMarkOracle} from "src/oracle/DreamDexMarkOracle.sol";
 import {DreamMarginVault} from "src/vault/DreamMarginVault.sol";
@@ -50,6 +52,8 @@ contract PositionOpenTest is Test {
   uint40 private constant _DELAY = 1 days;
   bytes32 private constant _MARKET_ID = keccak256("position-open-market");
   bytes32 private constant _MARKET_GROUP = keccak256("position-open-group");
+  bytes32 private constant _POSITION_PAGE_LIMIT = "POSITION_PAGE_LIMIT";
+  bytes32 private constant _SERIES_POLICY_ID = keccak256("position-open-series");
   uint256 private constant _YES_ID = 71;
   uint256 private constant _NO_ID = 72;
   address private constant _SETTLEMENT = address(0x5151);
@@ -125,15 +129,13 @@ contract PositionOpenTest is Test {
     _noGeneration = _deriveKey(_noKey);
 
     _fundIntegrationsAndOwners();
-    _register(_yesGeneration, _generation(_yesKey, 0), _oraclePolicy(_yesKey));
-    _register(_noGeneration, _generation(_noKey, 1), _oraclePolicy(_noKey));
+    SeriesPolicy memory policy = _seriesPolicy();
+    vm.prank(_RISK_STEWARD);
+    _controller.scheduleSeriesPolicyChange(keccak256("register-series"), _SERIES_POLICY_ID, policy);
     vm.warp(_START + _DELAY);
-    _executeRegistration(
-      _yesGeneration, _generation(_yesKey, 0), _oraclePolicy(_yesKey), keccak256("register-yes")
-    );
-    _executeRegistration(
-      _noGeneration, _generation(_noKey, 1), _oraclePolicy(_noKey), keccak256("register-no")
-    );
+    _controller.executeSeriesPolicyChange(keccak256("register-series"), _SERIES_POLICY_ID, policy);
+    _controller.activateSeriesGeneration(_yesKey, 0);
+    _controller.activateSeriesGeneration(_noKey, 1);
     _oracle.observe(_yesGeneration);
     _oracle.observe(_noGeneration);
     vm.warp(block.timestamp + 60);
@@ -142,6 +144,7 @@ contract PositionOpenTest is Test {
     vm.startPrank(_OWNER);
     _outcome.approve(address(_controller), _YES_ID, type(uint256).max);
     _outcome.approve(address(_controller), _NO_ID, type(uint256).max);
+    _collateral.approve(address(_controller), type(uint256).max);
     vm.stopPrank();
   }
 
@@ -161,13 +164,101 @@ contract PositionOpenTest is Test {
     assertEq(_vault.performingDebt(), 10 * _ONE);
     assertEq(_collateral.balanceOf(address(_controller)), 0);
     assertEq(_outcome.balanceOf(address(_controller), _YES_ID), 40 * _ONE);
+    bytes32 marketGroup = _controller.getGeneration(_yesGeneration).marketGroup;
     (uint256 attributed, uint256 outcomeDebt, uint256 marketDebt, uint256 totalDebt) =
-      _controller.aggregateState(_yesGeneration, _MARKET_GROUP, address(_outcome), _YES_ID);
+      _controller.aggregateState(_yesGeneration, marketGroup, address(_outcome), _YES_ID);
     assertEq(attributed, 40 * _ONE);
     assertEq(outcomeDebt, position.debtShares);
     assertEq(marketDebt, position.debtShares);
     assertEq(totalDebt, position.debtShares);
     assertEq(_vault.totalDebtShares(), totalDebt);
+  }
+
+  /// @notice Buys one exact-size YES position from owner collateral and vault debt atomically.
+  function test_openFromCollateralReconcilesOwnerSpendDebtAndShares() external {
+    IDreamMarginController.OpenFromCollateralParams memory params =
+      IDreamMarginController.OpenFromCollateralParams({
+        key: _yesKey,
+        outcomeIndex: 0,
+        targetShares: 40 * _ONE,
+        leverageBps: 20_000,
+        maxUserCollateralIn: 10 * _ONE,
+        maxDebt: 10 * _ONE,
+        limitPrice: 500_000,
+        deadline: block.timestamp + 600
+      });
+
+    vm.prank(_OWNER);
+    (uint256 positionId, uint256 userAssetsSpent, uint256 sharesBought, uint256 debtAssets) =
+      _controller.openFromCollateral(params);
+    Position memory position = _controller.getPosition(positionId);
+
+    assertEq(position.owner, _OWNER);
+    assertEq(position.shares, 40 * _ONE);
+    assertEq(position.debtShares, 10 * _ONE);
+    assertEq(position.initialEquity, 10 * _ONE);
+    assertEq(userAssetsSpent, 10 * _ONE);
+    assertEq(sharesBought, 40 * _ONE);
+    assertEq(debtAssets, 10 * _ONE);
+    assertEq(_collateral.balanceOf(address(_controller)), 0);
+    assertEq(_outcome.balanceOf(address(_controller), _YES_ID), 40 * _ONE);
+    assertEq(_pool.lastOrderType(), LibDreamMarginConstants.ORDER_TYPE_FOK);
+    assertEq(_controller.maximumPositionShares(_yesGeneration), 50 * _ONE);
+  }
+
+  /// @notice Rejects an oversized collateral-funded target before pulling cash or trading.
+  function test_openFromCollateralPreflightsCertifiedDepth() external {
+    IDreamMarginController.OpenFromCollateralParams memory params =
+      IDreamMarginController.OpenFromCollateralParams({
+        key: _yesKey,
+        outcomeIndex: 0,
+        targetShares: 51 * _ONE,
+        leverageBps: 20_000,
+        maxUserCollateralIn: 100 * _ONE,
+        maxDebt: 100 * _ONE,
+        limitPrice: 500_000,
+        deadline: block.timestamp + 600
+      });
+    uint256 ownerAssets = _collateral.balanceOf(_OWNER);
+
+    vm.prank(_OWNER);
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        LibDreamMarginErrors.PositionDepthExceeded.selector, 51 * _ONE, 50 * _ONE
+      )
+    );
+    _controller.openFromCollateral(params);
+
+    assertEq(_collateral.balanceOf(_OWNER), ownerAssets);
+    assertEq(_pool.submissionCount(), 0);
+    assertEq(_vault.performingDebt(), 0);
+  }
+
+  /// @notice Paginates every owner position without relying on historical event scans.
+  function test_positionsOfReturnsStableBoundedOpeningOrder() external {
+    _open(_yesParams());
+    _open(_yesParams());
+    _open(_yesParams());
+
+    (uint256[] memory first, uint256 total) = _controller.positionsOf(_OWNER, 0, 2);
+    assertEq(total, 3);
+    assertEq(first.length, 2);
+    assertEq(first[0], 1);
+    assertEq(first[1], 2);
+
+    (uint256[] memory second, uint256 repeatedTotal) = _controller.positionsOf(_OWNER, 2, 2);
+    assertEq(repeatedTotal, total);
+    assertEq(second.length, 1);
+    assertEq(second[0], 3);
+    (uint256[] memory exhausted,) = _controller.positionsOf(_OWNER, 3, 2);
+    assertEq(exhausted.length, 0);
+
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        LibDreamMarginErrors.ValueOutOfBounds.selector, _POSITION_PAGE_LIMIT, 101, 100
+      )
+    );
+    _controller.positionsOf(_OWNER, 0, 101);
   }
 
   /// @notice Pins the opening facet and prevents direct calls outside initialized controller state.
@@ -286,22 +377,22 @@ contract PositionOpenTest is Test {
 
     vm.prank(_OWNER);
     _controller.addCollateral(positionId, 2 * _ONE);
+    bytes32 marketGroup = _controller.getGeneration(_yesGeneration).marketGroup;
     (uint256 attributed,,,) =
-      _controller.aggregateState(_yesGeneration, _MARKET_GROUP, address(_outcome), _YES_ID);
+      _controller.aggregateState(_yesGeneration, marketGroup, address(_outcome), _YES_ID);
     assertEq(attributed, 42 * _ONE);
     assertEq(attributed, _outcome.balanceOf(address(_controller), _YES_ID));
   }
 
-  /// @notice Fails closed when the oracle's newest observation exceeds its freshness bound.
-  function test_staleOraclePreventsAnyBorrowOrCollateralMovement() external {
+  /// @notice Refreshes a mature stale oracle inside the opening transaction.
+  function test_openRefreshesStaleOracleWithoutSeparateTransaction() external {
     vm.warp(block.timestamp + 121);
-    vm.prank(_OWNER);
-    vm.expectRevert(
-      abi.encodeWithSelector(LibDreamMarginErrors.StaleOracle.selector, _yesGeneration, 121, 120)
-    );
-    _controller.openPosition(_yesParams());
-    assertEq(_vault.performingDebt(), 0);
-    assertEq(_outcome.balanceOf(address(_controller), _YES_ID), 0);
+    (uint256 positionId,, uint256 debtAssets) = _open(_yesParams());
+    (, ObservationRing memory ring) = _oracle.generationState(_yesGeneration);
+
+    assertEq(positionId, 1);
+    assertEq(debtAssets, 10 * _ONE);
+    assertEq(ring.newestTimestamp, block.timestamp);
   }
 
   /// @notice Rejects a generation frozen by the guardian before touching owner balances.
@@ -314,6 +405,17 @@ contract PositionOpenTest is Test {
     );
     _controller.openPosition(_yesParams());
     assertEq(_outcome.balanceOf(address(_controller), _YES_ID), 0);
+  }
+
+  /// @notice Applies one emergency series freeze to every generation admitted through it.
+  function test_frozenSeriesPolicyPreventsOpening() external {
+    vm.prank(_GUARDIAN);
+    _controller.freezeSeriesPolicy(_SERIES_POLICY_ID);
+    vm.prank(_OWNER);
+    vm.expectRevert(
+      abi.encodeWithSelector(LibDreamMarginErrors.SeriesPolicyFrozen.selector, _SERIES_POLICY_ID)
+    );
+    _controller.openPosition(_yesParams());
   }
 
   /// @notice Rejects the pinned tuple after its recyclable module nonce advances.
@@ -440,38 +542,9 @@ contract PositionOpenTest is Test {
     vm.stopPrank();
     _outcome.mint(_OWNER, _YES_ID, 100 * _ONE);
     _outcome.mint(_OWNER, _NO_ID, 100 * _ONE);
+    _collateral.mint(_OWNER, 1_000 * _ONE);
     _outcome.mint(address(_pool), _YES_ID, 500 * _ONE);
     _outcome.mint(address(_pool), _NO_ID, 500 * _ONE);
-  }
-
-  /// @notice Schedules one generation registration before the shared delay elapses.
-  /// @param generationKey Full generation identifier.
-  /// @param config Controller policy.
-  /// @param oracleConfig Oracle observation policy.
-  function _register(
-    bytes32 generationKey,
-    GenerationConfig memory config,
-    OracleConfig memory oracleConfig
-  ) private {
-    bytes32 changeId = config.risk.outcomeIndex == 0
-      ? keccak256("register-yes")
-      : keccak256("register-no");
-    vm.prank(_RISK_STEWARD);
-    _controller.scheduleGenerationChange(changeId, generationKey, config, oracleConfig);
-  }
-
-  /// @notice Executes one already-mature generation registration.
-  /// @param generationKey Full generation identifier.
-  /// @param config Controller policy.
-  /// @param oracleConfig Oracle observation policy.
-  /// @param changeId Previously scheduled identifier.
-  function _executeRegistration(
-    bytes32 generationKey,
-    GenerationConfig memory config,
-    OracleConfig memory oracleConfig,
-    bytes32 changeId
-  ) private {
-    _controller.executeGenerationChange(changeId, generationKey, config, oracleConfig);
   }
 
   /// @notice Returns separated administrative accounts.
@@ -548,6 +621,31 @@ contract PositionOpenTest is Test {
       maxObservations: 8,
       maxBookLevels: 4,
       enabled: true
+    });
+  }
+
+  /// @notice Returns one reusable origin policy for both local outcome generations.
+  function _seriesPolicy() private view returns (SeriesPolicy memory policy) {
+    RiskConfig memory risk = _generation(_yesKey, 0).risk;
+    OracleConfig memory oracleConfig = _oraclePolicy(_yesKey);
+    MockModuleMarket memory market_ = _moduleMarket();
+    policy = SeriesPolicy({
+      creator: market_.creator,
+      originVenueId: market_.originVenueId,
+      originOperatorId: market_.originOperatorId,
+      collateral: market_.collateral,
+      minIntervalSec: 1_800,
+      risk: risk,
+      oracle: SeriesOracleConfig({
+        minAge: oracleConfig.minAge,
+        updateInterval: oracleConfig.updateInterval,
+        staleAfter: oracleConfig.staleAfter,
+        depthQuantity: oracleConfig.depthQuantity,
+        maxObservations: oracleConfig.maxObservations,
+        maxBookLevels: oracleConfig.maxBookLevels
+      }),
+      enabled: true,
+      frozen: false
     });
   }
 

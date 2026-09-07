@@ -5,9 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTRACTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$CONTRACTS_DIR/.env}"
 DEPLOYMENT="$CONTRACTS_DIR/deployments/shannon-deployment.json"
-SELECTION="$CONTRACTS_DIR/deployments/shannon-selected-markets.json"
-CONFIGURATION="$CONTRACTS_DIR/deployments/shannon-market-configuration.json"
-OUTPUT="$CONTRACTS_DIR/deployments/shannon-smoke.json"
+MARKETS="${MARKETS:-$CONTRACTS_DIR/deployments/shannon-demo-markets.json}"
+OUTPUT="${SMOKE_OUTPUT:-$CONTRACTS_DIR/deployments/shannon-smoke.json}"
 
 set -a
 # shellcheck disable=SC1090
@@ -22,12 +21,13 @@ ORACLE="$(jq -r '.oracle' "$DEPLOYMENT")"
 COLLATERAL="0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E"
 OUTCOME_TOKEN="0xB52c5934113Af5c0Bb20eb3C72290C8215f755b9"
 UNIT=1000000
-FAUCET_TARGET=1000000000
-VAULT_DEPOSIT=500000000
-SET_AMOUNT=25000000
-INITIAL_SHARES=16000000
+FAUCET_TARGET=1500000000
+VAULT_DEPOSIT=100000000
+TARGET_SHARES=500000000
+MAX_USER_COLLATERAL=300000000
+MAX_DEBT=250000000
 PARTIAL_REPAY=250000
-MAX_UINT256="115792089237316195423570985008687907853269984665640564039457584007913129639935"
+CONTROLLER_ALLOWANCE="$((2 * MAX_USER_COLLATERAL + 2 * PARTIAL_REPAY))"
 POSITION_OPENED_TOPIC="$(cast keccak 'PositionOpened(uint256,address,bytes32,uint256,uint256,uint256)')"
 
 lower() {
@@ -60,65 +60,36 @@ else
   faucet_tx="not-required"
 fi
 
-vault_shares="$(number_call "$VAULT" 'balanceOf(address)(uint256)' "$ACCOUNT")"
-if (( vault_shares == 0 )); then
-  send_call approve_vault_tx "$COLLATERAL" 'approve(address,uint256)' "$VAULT" "$VAULT_DEPOSIT"
-  send_call deposit_tx "$VAULT" 'deposit(uint256,address)' "$VAULT_DEPOSIT" "$ACCOUNT"
-  send_call clear_vault_tx "$COLLATERAL" 'approve(address,uint256)' "$VAULT" 0
-  vault_shares="$(number_call "$VAULT" 'balanceOf(address)(uint256)' "$ACCOUNT")"
-else
-  deposit_tx="reused-existing-deposit"
-fi
-if (( vault_shares == 0 )); then
+vault_shares_before="$(number_call "$VAULT" 'balanceOf(address)(uint256)' "$ACCOUNT")"
+send_call approve_vault_tx "$COLLATERAL" 'approve(address,uint256)' "$VAULT" "$VAULT_DEPOSIT"
+send_call deposit_tx "$VAULT" 'deposit(uint256,address)' "$VAULT_DEPOSIT" "$ACCOUNT"
+send_call clear_vault_tx "$COLLATERAL" 'approve(address,uint256)' "$VAULT" 0
+vault_shares_after="$(number_call "$VAULT" 'balanceOf(address)(uint256)' "$ACCOUNT")"
+smoke_vault_shares="$((vault_shares_after - vault_shares_before))"
+if (( smoke_vault_shares == 0 )); then
   echo "Vault deposit minted no ERC-4626 shares." >&2
   exit 1
 fi
-echo "Deposited tUSDC and received $vault_shares vault shares."
-
-for prefix in btc eth; do
-  pool="$(jq -r ".$prefix.poolAddress" "$SELECTION")"
-  yes_id="$(jq -r ".$prefix.yesTokenId" "$SELECTION")"
-  no_id="$(jq -r ".$prefix.noTokenId" "$SELECTION")"
-  yes_balance="$(number_call "$OUTCOME_TOKEN" 'balanceOf(address,uint256)(uint256)' "$ACCOUNT" "$yes_id")"
-  no_balance="$(number_call "$OUTCOME_TOKEN" 'balanceOf(address,uint256)(uint256)' "$ACCOUNT" "$no_id")"
-  if (( yes_balance < INITIAL_SHARES || no_balance < INITIAL_SHARES )); then
-    send_call mint_approve_tx "$COLLATERAL" 'approve(address,uint256)' "$pool" "$SET_AMOUNT"
-    send_call mint_tx "$pool" 'mintSet(address,address,uint256)' "$ACCOUNT" "$ACCOUNT" "$SET_AMOUNT"
-    send_call mint_clear_tx "$COLLATERAL" 'approve(address,uint256)' "$pool" 0
-    echo "Minted a complete $prefix outcome set ($mint_tx)."
-  else
-    echo "Reusing the existing complete $prefix outcome set."
-  fi
-done
+echo "Deposited tUSDC and received $smoke_vault_shares new vault shares."
 
 send_call controller_approval_tx "$COLLATERAL" \
-  'approve(address,uint256)' "$CONTROLLER" "$MAX_UINT256"
+  'approve(address,uint256)' "$CONTROLLER" "$CONTROLLER_ALLOWANCE"
 
 exercise_market() {
   local prefix="$1"
-  local yes_key no_key yes_mark no_mark outcome outcome_index generation_key outcome_id limit_price
-  local pool market_id nonce book_side book tuple deadline event_log position_topic decoded
-  yes_key="$(jq -r ".${prefix}YesGenerationKey" "$CONFIGURATION")"
-  no_key="$(jq -r ".${prefix}NoGenerationKey" "$CONFIGURATION")"
-  yes_mark="$(number_call "$ORACLE" 'conservativeTwap(bytes32)(uint256,uint256,uint256)' "$yes_key")"
-  no_mark="$(number_call "$ORACLE" 'conservativeTwap(bytes32)(uint256,uint256,uint256)' "$no_key")"
-  pool="$(jq -r ".$prefix.poolAddress" "$SELECTION")"
-  market_id="$(jq -r ".$prefix.marketId" "$SELECTION")"
-  nonce="$(jq -r ".$prefix.nonce" "$SELECTION")"
-
-  if (( yes_mark >= no_mark )); then
-    outcome=yes
-    outcome_index=0
-    generation_key="$yes_key"
-    outcome_id="$(jq -r ".$prefix.yesTokenId" "$SELECTION")"
-    book_side=false
-  else
-    outcome=no
-    outcome_index=1
-    generation_key="$no_key"
-    outcome_id="$(jq -r ".$prefix.noTokenId" "$SELECTION")"
-    book_side=true
-  fi
+  local yes_key outcome outcome_index generation_key outcome_id limit_price
+  local pool market_id nonce book_side close_book_side book close_book tuple deadline
+  local close_limit_price event_log position_topic decoded position
+  yes_key="$(jq -r ".${prefix}YesGenerationKey" "$MARKETS")"
+  pool="$(jq -r ".${prefix}Pool" "$MARKETS")"
+  market_id="$(jq -r ".${prefix}MarketId" "$MARKETS")"
+  nonce="$(jq -r ".${prefix}MarketNonce" "$MARKETS")"
+  outcome=yes
+  outcome_index=0
+  generation_key="$yes_key"
+  outcome_id="$(jq -r ".${prefix}YesId" "$MARKETS")"
+  book_side=false
+  close_book_side=true
 
   book="$(cast call "$pool" 'getBookLevels(bool,uint64)((uint256,uint256)[])' \
     "$book_side" 1 --rpc-url "$RPC_URL")"
@@ -127,17 +98,10 @@ exercise_market() {
     echo "Could not read the $prefix $outcome execution price." >&2
     exit 1
   fi
-  if (( $(number_call "$OUTCOME_TOKEN" 'balanceOf(address,uint256)(uint256)' "$ACCOUNT" "$outcome_id") < INITIAL_SHARES )); then
-    echo "Insufficient $prefix $outcome outcome funding." >&2
-    exit 1
-  fi
-
-  send_call outcome_approval_tx "$OUTCOME_TOKEN" \
-    'approve(address,uint256,uint256)' "$CONTROLLER" "$outcome_id" "$INITIAL_SHARES"
   deadline="$(( $(date +%s) + 120 ))"
-  tuple="(($market_id,$pool,$nonce,$OUTCOME_TOKEN,$outcome_id,$COLLATERAL),$outcome_index,$INITIAL_SHARES,12500,10000000,1000,$limit_price,2,$deadline)"
+  tuple="(($market_id,$pool,$nonce,$OUTCOME_TOKEN,$outcome_id,$COLLATERAL),$outcome_index,$TARGET_SHARES,20000,$MAX_USER_COLLATERAL,$MAX_DEBT,$limit_price,$deadline)"
   send_call open_tx "$CONTROLLER" \
-    'openPosition(((bytes32,address,uint64,address,uint256,address),uint8,uint256,uint32,uint256,uint256,uint256,uint8,uint256))' \
+    'openFromCollateral(((bytes32,address,uint64,address,uint256,address),uint8,uint256,uint32,uint256,uint256,uint256,uint256))' \
     "$tuple"
   event_log="$(jq -c --arg topic "$(lower "$POSITION_OPENED_TOPIC")" \
     '.logs[] | select((.topics[0] | ascii_downcase) == $topic)' <<<"$SEND_RECEIPT")"
@@ -152,13 +116,22 @@ exercise_market() {
   opening_debt="$(awk 'NR == 3 {print $1}' <<<"$decoded")"
 
   send_call repay_tx "$CONTROLLER" 'repay(uint256,uint256)' "$position_id" "$PARTIAL_REPAY"
+  close_book="$(cast call "$pool" 'getBookLevels(bool,uint64)((uint256,uint256)[])' \
+    "$close_book_side" 1 --rpc-url "$RPC_URL")"
+  close_limit_price="$(sed -n 's/^[(]*\[*(\([0-9]*\).*/\1/p' <<<"$close_book")"
+  if [[ -z "$close_limit_price" ]]; then
+    echo "Could not read the $prefix $outcome close price." >&2
+    exit 1
+  fi
+  deadline="$(( $(date +%s) + 120 ))"
   send_call close_tx "$CONTROLLER" \
     'close((uint256,uint256,uint256,uint256,uint8,uint256,bool))' \
-    "($position_id,10000000,0,0,0,0,true)"
+    "($position_id,0,0,$close_limit_price,2,$deadline,false)"
   position="$(cast call "$CONTROLLER" \
     'getPosition(uint256)((address,bytes32,address,address,uint256,uint128,uint128,uint128,uint64,uint40,uint40,uint8,uint8))' \
-    "$position_id" --rpc-url "$RPC_URL")"
-  if [[ "$position" != *", 0, 0,"* || "$position" != *", 5)" ]]; then
+    "$position_id" --rpc-url "$RPC_URL" --json)"
+  if (( $(jq -r '.[0][5]' <<<"$position") != 0 || $(jq -r '.[0][6]' <<<"$position") != 0 \
+    || $(jq -r '.[0][12]' <<<"$position") != 5 )); then
     echo "$prefix position did not finish debt-free and closed." >&2
     exit 1
   fi
@@ -185,7 +158,7 @@ if (( debt_shares != 0 )); then
 fi
 balance_before="$(number_call "$COLLATERAL" 'balanceOf(address)(uint256)' "$ACCOUNT")"
 send_call redeem_tx "$VAULT" 'redeem(uint256,address,address)' \
-  "$vault_shares" "$ACCOUNT" "$ACCOUNT"
+  "$smoke_vault_shares" "$ACCOUNT" "$ACCOUNT"
 balance_after="$(number_call "$COLLATERAL" 'balanceOf(address)(uint256)' "$ACCOUNT")"
 redeemed_assets="$((balance_after - balance_before))"
 if (( redeemed_assets < VAULT_DEPOSIT )); then
@@ -207,7 +180,7 @@ jq -n \
   --argjson ethPositionId "$eth_position_id" --argjson ethSharesBought "$eth_shares_bought" \
   --argjson ethOpeningDebtAssets "$eth_opening_debt" --arg ethOpenTransaction "$eth_open_tx" \
   --arg ethRepayTransaction "$eth_repay_tx" --arg ethCloseTransaction "$eth_close_tx" \
-  --argjson vaultSharesRedeemed "$vault_shares" --argjson vaultAssetsRedeemed "$redeemed_assets" \
+  --argjson vaultSharesRedeemed "$smoke_vault_shares" --argjson vaultAssetsRedeemed "$redeemed_assets" \
   --arg redeemTransaction "$redeem_tx" \
   '{schema:$schema,chainId:$chainId,completedAtBlock:$completedAtBlock,account:$account,controller:$controller,vault:$vault,faucetTransaction:$faucetTransaction,depositTransaction:$depositTransaction,btcOutcome:$btcOutcome,btcGenerationKey:$btcGenerationKey,btcPositionId:$btcPositionId,btcSharesBought:$btcSharesBought,btcOpeningDebtAssets:$btcOpeningDebtAssets,btcOpenTransaction:$btcOpenTransaction,btcRepayTransaction:$btcRepayTransaction,btcCloseTransaction:$btcCloseTransaction,ethOutcome:$ethOutcome,ethGenerationKey:$ethGenerationKey,ethPositionId:$ethPositionId,ethSharesBought:$ethSharesBought,ethOpeningDebtAssets:$ethOpeningDebtAssets,ethOpenTransaction:$ethOpenTransaction,ethRepayTransaction:$ethRepayTransaction,ethCloseTransaction:$ethCloseTransaction,vaultSharesRedeemed:$vaultSharesRedeemed,vaultAssetsRedeemed:$vaultAssetsRedeemed,redeemTransaction:$redeemTransaction,finalVaultDebtShares:0}' \
   >"$OUTPUT"

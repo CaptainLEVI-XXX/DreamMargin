@@ -1,0 +1,316 @@
+.dm-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dm-header {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--dm-space) * 4);
+  border-bottom: 1px solid var(--dm-divider);
+  min-height: 64px;
+  padding: calc(var(--dm-space) * 1.5)
+    max(var(--dm-mobile-pad), calc((100vw - var(--dm-max-width)) / 2 + var(--dm-mobile-pad)));
+}
+
+/* Balance sits beside the faucet so topping up is one reach, not a hunt. */
+.dm-wallet-balance {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--dm-ink);
+  font-size: var(--dm-size-13);
+}
+
+.dm-wallet-balance small {
+  color: var(--dm-text);
+  font-size: var(--dm-size-11);
+}
+
+.dm-faucet {
+  border: 1px solid var(--dm-line);
+  background: transparent;
+  color: var(--dm-text);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  min-height: 38px;
+  padding: 7px 12px;
+  border-radius: var(--dm-radius);
+  cursor: pointer;
+}
+
+.dm-faucet:hover {
+  color: var(--dm-ink);
+  border-color: var(--dm-accent);
+}
+
+.dm-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--dm-space) * 1.1);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* The brand mark is the one deliberate white tile in the header. */
+.dm-mark {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  border-radius: 7px;
+  background: var(--dm-ink);
+  font-family: var(--dm-font-brand);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: -0.04em;
+  color: var(--dm-ground);
+  line-height: 1;
+}
+
+.dm-wordmark {
+  font-family: var(--dm-font-brand);
+  font-weight: 800;
+  font-size: var(--dm-size-17);
+  letter-spacing: -0.04em;
+  color: var(--dm-ink);
+}
+
+.dm-nav-desktop {
+  display: none;
+  align-self: stretch;
+  gap: calc(var(--dm-space) * 3.5);
+}
+
+.dm-nav-desktop a,
+.dm-nav-mobile a {
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-13);
+  color: var(--dm-text);
+  text-decoration: none;
+}
+
+.dm-nav-desktop a {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+}
+
+.dm-nav-desktop a::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -13px;
+  left: 0;
+  height: 1px;
+  background: var(--dm-accent);
+  opacity: 0;
+}
+
+.dm-nav-desktop a[aria-current="page"],
+.dm-nav-mobile a[aria-current="page"] {
+  color: var(--dm-ink);
+}
+
+.dm-nav-desktop a[aria-current="page"]::after {
+  opacity: 1;
+}
+
+.dm-main {
+  flex: 1;
+  width: 100%;
+  max-width: var(--dm-max-width);
+  margin: 0 auto;
+  padding: var(--dm-page-space) var(--dm-mobile-pad);
+}
+
+.dm-nav-mobile {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: space-around;
+  border-top: 1px solid var(--dm-divider);
+  background: var(--dm-ground);
+  padding: calc(var(--dm-space) * 2) var(--dm-mobile-pad);
+}
+
+@media (min-width: 1024px) {
+  .dm-nav-desktop {
+    display: flex;
+  }
+
+  .dm-nav-mobile {
+    display: none;
+  }
+}
+
+.dm-header-right {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dm-space);
+}
+
+.dm-header-funds {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dm-space);
+  min-height: 38px;
+  padding-left: 10px;
+  border-left: 1px solid var(--dm-divider);
+}
+
+.dm-wallet {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dm-space);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-13);
+}
+
+.dm-wallet-note {
+  color: var(--dm-text);
+}
+
+.dm-wallet-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.dm-wallet-account {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  border: 1px solid var(--dm-line);
+  border-radius: var(--dm-radius);
+  padding: 7px 10px;
+  background: transparent;
+  color: var(--dm-ink);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  cursor: pointer;
+  transition:
+    border-color var(--dm-transition),
+    background var(--dm-transition);
+}
+
+.dm-wallet-account:hover,
+.dm-wallet-account[aria-expanded="true"] {
+  border-color: #3a3a40;
+  background: var(--dm-surface);
+}
+
+.dm-wallet-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--dm-up);
+  border-radius: 50%;
+}
+
+.dm-wallet-network {
+  color: var(--dm-text);
+  font-size: var(--dm-size-11);
+}
+
+.dm-wallet-divider {
+  width: 1px;
+  height: 14px;
+  background: var(--dm-line);
+}
+
+.dm-wallet-chevron {
+  position: relative;
+  top: -1px;
+  color: var(--dm-muted);
+  font-size: 14px;
+}
+
+.dm-wallet-popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + var(--dm-space));
+  right: 0;
+  width: 240px;
+  display: grid;
+  padding: calc(var(--dm-space) * 2);
+  border: 1px solid var(--dm-line);
+  border-radius: var(--dm-radius-large);
+  background: var(--dm-panel-raised);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4);
+}
+
+.dm-wallet-popover-label,
+.dm-wallet-popover-network small {
+  color: var(--dm-muted);
+  font-family: var(--dm-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.dm-wallet-popover-address {
+  margin-top: 3px;
+  color: var(--dm-ink);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-13);
+}
+
+.dm-wallet-popover-network {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: calc(var(--dm-space) * 2) 0 0;
+  padding: calc(var(--dm-space) * 1.5) 0;
+  border-top: 1px solid var(--dm-divider);
+  color: var(--dm-ink-soft);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+}
+
+.dm-wallet-menu-action {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--dm-ink-soft);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  text-align: left;
+  cursor: pointer;
+}
+
+.dm-wallet-menu-action:hover {
+  border-color: var(--dm-line);
+  background: var(--dm-surface);
+}
+
+.dm-wallet-disconnect {
+  color: var(--dm-down);
+}
+
+@media (max-width: 600px) {
+  .dm-wallet-divider,
+  .dm-wallet-network {
+    display: none;
+  }
+
+  .dm-header {
+    gap: calc(var(--dm-space) * 2);
+  }
+
+  .dm-wordmark {
+    display: none;
+  }
+
+  .dm-header-funds {
+    padding-left: 0;
+    border-left: 0;
+  }
+}

@@ -1,0 +1,62 @@
+/* Brand tokens. frontend-spec §18.1 and §18.3. Values are normative — do not
+   substitute approximations. Components reference these, never literal hex. */
+
+:root {
+  color-scheme: dark;
+
+  /* Ground and line */
+  --dm-ground: #0a0a0b;
+  --dm-surface: #0d0d0f;
+  --dm-panel: #12110f;
+  --dm-panel-raised: #171613;
+  --dm-line: #26262a;
+  --dm-divider: #1c1c1f;
+
+  /* Ink */
+  --dm-text: #a8aaad;
+  --dm-muted: #8a8c90;
+  --dm-ink-soft: #e8e9ea;
+  --dm-ink: #ffffff;
+
+  /* Accent — fills exactly one object per view */
+  --dm-accent: #6e56f8;
+  --dm-accent-hover: #8b7cff;
+  --dm-accent-tint: rgba(110, 86, 248, 0.14);
+
+  /* Signal — value movement, gain/loss, margin state. Never YES/NO choice. */
+  --dm-up: #00d68f;
+  --dm-down: #f6465d;
+  --dm-warn: #e0a52b;
+
+  /* Type */
+  --dm-font-brand: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --dm-font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  /* Scale: 11 / 13 / 17 / 19 / 30 / 44 / 64 */
+  --dm-size-11: 11px;
+  --dm-size-13: 13px;
+  --dm-size-17: 17px;
+  --dm-size-19: 19px;
+  --dm-size-30: 30px;
+  --dm-size-44: 44px;
+  --dm-size-64: 64px;
+
+  /* Layout */
+  --dm-space: 8px;
+  --dm-page-space: 32px;
+  --dm-mobile-pad: 16px;
+  --dm-max-width: 1400px;
+  --dm-panel-width: 400px;
+  --dm-measure: 640px;
+  --dm-radius: 8px;
+  --dm-radius-large: 12px;
+
+  /* Motion */
+  --dm-transition: 175ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dm-transition: 0ms;
+  }
+}

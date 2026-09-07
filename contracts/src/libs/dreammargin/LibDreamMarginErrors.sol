@@ -77,6 +77,29 @@ library LibDreamMarginErrors {
   /// @param generationKey Frozen generation key.
   error GenerationFrozen(bytes32 generationKey);
 
+  /// @notice Raised when no enabled series policy admits a market identity.
+  /// @param policyId Missing or disabled policy identifier.
+  error UnsupportedSeriesPolicy(bytes32 policyId);
+
+  /// @notice Raised when no registered policy owns a market's origin identity.
+  /// @param identity Hash of the market's creator, venue, operator, and collateral.
+  error UnsupportedSeriesIdentity(bytes32 identity);
+
+  /// @notice Raised when an emergency-frozen series policy is used for new risk.
+  /// @param policyId Frozen policy identifier.
+  error SeriesPolicyFrozen(bytes32 policyId);
+
+  /// @notice Raised when another policy already owns a series identity.
+  /// @param identity Hash of creator, venue, operator, and collateral.
+  /// @param policyId Existing policy claiming the identity.
+  error SeriesPolicyIdentityClaimed(bytes32 identity, bytes32 policyId);
+
+  /// @notice Raised when a market interval is shorter than its series policy permits.
+  /// @param marketId DreamDEX market identifier rejected.
+  /// @param interval Actual trading interval in seconds.
+  /// @param minimumInterval Smallest policy-approved interval in seconds.
+  error SeriesIntervalTooShort(bytes32 marketId, uint256 interval, uint256 minimumInterval);
+
   /// @notice Raised when a recyclable pool reports a different nonce.
   /// @param pool Pool address read.
   /// @param expectedNonce Registered generation nonce.
@@ -302,6 +325,15 @@ library LibDreamMarginErrors {
   /// @param caller Unauthorized caller.
   /// @param configurator Authorized immutable configurator.
   error NotConfigurator(address caller, address configurator);
+
+  /// @notice Raised when a callback did not originate from Somnia's privileged precompile.
+  /// @param caller Unauthorized callback caller.
+  /// @param precompile Required native Reactivity precompile.
+  error NotReactivityPrecompile(address caller, address precompile);
+
+  /// @notice Raised when Reactivity delivers an event from an unbound emitter.
+  /// @param emitter Offending event-emitter address.
+  error UnsupportedCallbackEmitter(address emitter);
 
   /// @notice Raised when a terminal action is requested before settlement finalization.
   /// @param outcomeId Outcome ID without a frozen terminal record.

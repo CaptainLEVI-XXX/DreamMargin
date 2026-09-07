@@ -22,7 +22,9 @@ import {
   GlobalRiskConfig,
   MarketKey,
   ProtocolMode,
-  RiskConfig
+  RiskConfig,
+  SeriesOracleConfig,
+  SeriesPolicy
 } from "src/libs/dreammargin/LibDreamMarginStorage.sol";
 import {DreamDexMarkOracle} from "src/oracle/DreamDexMarkOracle.sol";
 import {DreamMarginVault} from "src/vault/DreamMarginVault.sol";
@@ -54,6 +56,7 @@ contract DreamMarginControllerAdminTest is Test {
   address private constant _FEE_COLLECTOR = address(0x1004);
   address private constant _FEE_RECIPIENT = address(0x1005);
   address private constant _STRANGER = address(0xBAD);
+  bytes32 private constant _SERIES_POLICY_ID = keccak256("admin-series-policy");
 
   MockERC20 private _collateral;
   MockERC6909 private _outcome;
@@ -349,6 +352,78 @@ contract DreamMarginControllerAdminTest is Test {
     assertEq(keccak256(abi.encode(storedOracle)), keccak256(abi.encode(oracleConfig)));
   }
 
+  /// @notice Lets any caller activate both exact outcomes after one delayed origin-policy change.
+  function test_seriesPolicyPermissionlesslyActivatesMatchingGeneration() external {
+    SeriesPolicy memory policy = _seriesPolicy();
+    _registerSeriesPolicy(policy);
+
+    (bytes32 policyId, bool eligible) = _controller.policyFor(_MARKET_ID);
+    assertEq(policyId, _SERIES_POLICY_ID);
+    assertTrue(eligible);
+
+    vm.prank(_STRANGER);
+    (bytes32 yesGeneration, bytes32 admittedBy) = _controller.activateSeriesGeneration(_key, 0);
+    assertEq(yesGeneration, _generationKey);
+    assertEq(admittedBy, _SERIES_POLICY_ID);
+    assertEq(_controller.policyForGeneration(yesGeneration), _SERIES_POLICY_ID);
+    GenerationConfig memory stored = _controller.getGeneration(yesGeneration);
+    assertEq(stored.risk.outcomeIndex, 0);
+    assertTrue(stored.enabled);
+
+    MarketKey memory noKey = _key;
+    noKey.outcomeId = _NO_ID;
+    (bytes32 noGeneration,) = _controller.activateSeriesGeneration(noKey, 1);
+    GenerationConfig memory storedNo = _controller.getGeneration(noGeneration);
+    assertEq(storedNo.risk.outcomeIndex, 1);
+    assertEq(stored.marketGroup, storedNo.marketGroup);
+    (OracleConfig memory oracleConfig,) = _oracle.generationState(noGeneration);
+    assertEq(oracleConfig.key.outcomeId, _NO_ID);
+    assertEq(oracleConfig.minAge, policy.oracle.minAge);
+
+    vm.prank(_GUARDIAN);
+    _controller.freezeSeriesPolicy(_SERIES_POLICY_ID);
+    (, eligible) = _controller.policyFor(_MARKET_ID);
+    assertFalse(eligible);
+  }
+
+  /// @notice Refuses each untrusted origin field and a market below the minimum interval.
+  function test_seriesPolicyRejectsUntrustedOriginsAndShortMarkets() external {
+    SeriesPolicy memory policy = _seriesPolicy();
+    _registerSeriesPolicy(policy);
+    MockModuleMarket memory market_ = _moduleMarket();
+
+    market_.creator = address(0xBAD1);
+    _module.setMarket(_MARKET_ID, 1, market_);
+    vm.expectPartialRevert(LibDreamMarginErrors.UnsupportedSeriesIdentity.selector);
+    _controller.activateSeriesGeneration(_key, 0);
+
+    market_ = _moduleMarket();
+    market_.originVenueId = keccak256("untrusted-venue");
+    _module.setMarket(_MARKET_ID, 1, market_);
+    vm.expectPartialRevert(LibDreamMarginErrors.UnsupportedSeriesIdentity.selector);
+    _controller.activateSeriesGeneration(_key, 0);
+
+    market_ = _moduleMarket();
+    market_.originOperatorId = 7;
+    _module.setMarket(_MARKET_ID, 1, market_);
+    vm.expectPartialRevert(LibDreamMarginErrors.UnsupportedSeriesIdentity.selector);
+    _controller.activateSeriesGeneration(_key, 0);
+
+    market_ = _moduleMarket();
+    market_.tradingStart = uint64(_START);
+    market_.expiry = uint64(_START) + policy.minIntervalSec - 1;
+    _module.setMarket(_MARKET_ID, 1, market_);
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        LibDreamMarginErrors.SeriesIntervalTooShort.selector,
+        _MARKET_ID,
+        policy.minIntervalSec - 1,
+        policy.minIntervalSec
+      )
+    );
+    _controller.activateSeriesGeneration(_key, 0);
+  }
+
   /// @notice Lets guardian synchronously disable and freeze only a registered generation.
   function test_guardianFreezesRegisteredGeneration() external {
     _registerGeneration();
@@ -471,6 +546,40 @@ contract DreamMarginControllerAdminTest is Test {
       maxBookLevels: 4,
       enabled: true
     });
+  }
+
+  /// @notice Returns the reusable policy matching the local module origin.
+  function _seriesPolicy() private view returns (SeriesPolicy memory policy) {
+    RiskConfig memory risk = _generationConfig().risk;
+    OracleConfig memory oracleConfig = _oracleConfig();
+    policy = SeriesPolicy({
+      creator: address(0xC0DE),
+      originVenueId: bytes32(0),
+      originOperatorId: 0,
+      collateral: address(_collateral),
+      minIntervalSec: 1_800,
+      risk: risk,
+      oracle: SeriesOracleConfig({
+        minAge: oracleConfig.minAge,
+        updateInterval: oracleConfig.updateInterval,
+        staleAfter: oracleConfig.staleAfter,
+        depthQuantity: oracleConfig.depthQuantity,
+        maxObservations: oracleConfig.maxObservations,
+        maxBookLevels: oracleConfig.maxBookLevels
+      }),
+      enabled: true,
+      frozen: false
+    });
+  }
+
+  /// @notice Registers one reusable policy after the configured delay.
+  /// @param policy Complete origin, risk, and oracle template.
+  function _registerSeriesPolicy(SeriesPolicy memory policy) private {
+    bytes32 changeId = keccak256("series-policy-change");
+    vm.prank(_RISK_STEWARD);
+    _controller.scheduleSeriesPolicyChange(changeId, _SERIES_POLICY_ID, policy);
+    vm.warp(_START + 1 days);
+    _controller.executeSeriesPolicyChange(changeId, _SERIES_POLICY_ID, policy);
   }
 
   /// @notice Schedules one exact payload as governance.

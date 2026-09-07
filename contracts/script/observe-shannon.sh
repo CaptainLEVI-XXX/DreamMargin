@@ -5,8 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTRACTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$CONTRACTS_DIR/.env}"
 DEPLOYMENT="$CONTRACTS_DIR/deployments/shannon-deployment.json"
-CONFIGURATION="$CONTRACTS_DIR/deployments/shannon-market-configuration.json"
-OUTPUT="$CONTRACTS_DIR/deployments/shannon-oracle-observation.json"
+CONFIGURATION="${CONFIGURATION:-$CONTRACTS_DIR/deployments/shannon-market-configuration.json}"
+OUTPUT="${OBSERVATION_OUTPUT:-$CONTRACTS_DIR/deployments/shannon-oracle-observation.json}"
 
 set -a
 # shellcheck disable=SC1090
@@ -24,6 +24,16 @@ keys=(
 hashes=()
 
 for key in "${keys[@]}"; do
+  state="$(cast call "$oracle" \
+    'generationState(bytes32)(((bytes32,address,uint64,address,uint256,address),uint40,uint40,uint40,uint128,uint16,uint16,bool),(uint16,uint16,uint40,uint40))' \
+    "$key" --rpc-url "$RPC_URL" --json)"
+  update_interval="$(jq -r '.[0][2]' <<<"$state")"
+  newest_timestamp="$(jq -r '.[1][3]' <<<"$state")"
+  if (( newest_timestamp != 0 && $(date +%s) < newest_timestamp + update_interval )); then
+    hashes+=("not-due")
+    echo "Observation is not due yet for $key."
+    continue
+  fi
   receipt="$(cast send "$oracle" 'observe(bytes32)' "$key" \
     --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --json)"
   if [[ "$(jq -r '.status' <<<"$receipt")" != "0x1" ]]; then

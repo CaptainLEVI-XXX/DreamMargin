@@ -52,6 +52,11 @@ interface IDreamDexMarkOracle {
   /// @return observation Accepted depth-aware observation.
   function observe(bytes32 generationKey) external returns (MarkObservation memory observation);
 
+  /// @notice Samples the current book only when the configured interval has elapsed.
+  /// @param generationKey Full market-generation key.
+  /// @return recorded Whether this call persisted a new observation.
+  function observeIfDue(bytes32 generationKey) external returns (bool recorded);
+
   /// @notice Returns one retained observation from the bounded ring.
   /// @param generationKey Full market-generation key.
   /// @param index Ring index queried.

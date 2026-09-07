@@ -1,53 +1,53 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.34;
 
-/// @title DreamMargin Shannon market configuration
+/// @title DreamMargin Shannon series configuration
 /// @author DreamMargin contributors
-/// @notice Schedules and executes exact BTC and ETH daily-generation registrations.
-/// @dev Discovery pins market IDs before either governance transaction. Both phases rebuild and
-///      validate the same complete generation payload from DreamDEX state.
+/// @notice Registers one reusable DreamDEX-origin policy and activates current BTC/ETH outcomes.
+/// @dev Governance approves the origin once; subsequent exact generations activate permissionlessly.
 
 import {LibShannonSetup} from "script/LibShannonSetup.sol";
 
 import {IDreamDexMarkOracle} from "src/interfaces/dreammargin/IDreamDexMarkOracle.sol";
 import {IDreamMarginController} from "src/interfaces/dreammargin/IDreamMarginController.sol";
 
-import {OracleConfig, ObservationRing} from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.sol";
+import {OracleConfig} from "src/libs/dreammargin/LibDreamDexMarkOracleStorage.sol";
 import {
   GenerationConfig,
   LibDreamMarginStorage,
-  MarketKey
+  MarketKey,
+  SeriesOracleConfig,
+  SeriesPolicy
 } from "src/libs/dreammargin/LibDreamMarginStorage.sol";
 
 import {Script} from "forge-std/Script.sol";
 
-// Configuration casts are preceded by explicit bounds and manifests intentionally serialize calls.
-// The four fixed-size loops deliberately perform independent, bounded governance calls.
+// Configuration casts are explicitly bounded and four activation calls are intentionally bounded.
 // forge-lint: disable-start(unsafe-typecast, unused-return, calls-loop, require-revert-in-loop)
 
-/// @notice Shared configuration reconstruction for both delayed-governance phases.
-abstract contract ShannonMarketConfiguration is Script {
-  bytes32 internal constant BTC_GROUP = keccak256("SHANNON_BTC_DAILY");
-  bytes32 internal constant ETH_GROUP = keccak256("SHANNON_ETH_DAILY");
+/// @notice Reconstructs the exact reusable policy and current outcome generations.
+abstract contract ShannonSeriesConfiguration is Script {
+  /// @notice Stable identifier for the trusted DreamDEX Shannon origin policy.
+  bytes32 internal constant POLICY_ID = keccak256("SHANNON_DREAMDEX_ORIGIN_V1");
 
-  /// @notice One exact outcome registration and its governance identity.
-  /// @param generationKey Hash of the full immutable market-generation tuple.
-  /// @param changeId Deterministic delayed-change identifier.
-  /// @param generation Controller generation policy.
-  /// @param oracle Oracle observation policy.
-  struct Registration {
+  /// @notice One exact current outcome that may activate under the reusable policy.
+  /// @param generationKey Hash of the full immutable generation tuple.
+  /// @param key Exact DreamDEX generation tuple.
+  /// @param outcomeIndex Zero for YES or one for NO.
+  struct Activation {
     bytes32 generationKey;
-    bytes32 changeId;
-    GenerationConfig generation;
-    OracleConfig oracle;
+    MarketKey key;
+    uint8 outcomeIndex;
   }
 
-  /// @notice Validates the stack and reconstructs four exact registrations.
+  /// @notice Loads live markets and reconstructs the single policy payload.
   /// @return privateKey Broadcast key loaded only inside Foundry.
   /// @return deployment Parsed deployed stack.
-  /// @return btc Validated BTC daily market.
-  /// @return eth Validated ETH daily market.
-  /// @return registrations BTC YES, BTC NO, ETH YES, and ETH NO policies.
+  /// @return btc Validated current BTC daily market.
+  /// @return eth Validated current ETH daily market.
+  /// @return changeId Deterministic delayed-policy change identifier.
+  /// @return policy Reusable origin, risk, and oracle template.
+  /// @return activations Current BTC/ETH YES/NO outcomes.
   function _configuration()
     internal
     view
@@ -56,7 +56,9 @@ abstract contract ShannonMarketConfiguration is Script {
       LibShannonSetup.Deployment memory deployment,
       LibShannonSetup.LiveMarket memory btc,
       LibShannonSetup.LiveMarket memory eth,
-      Registration[4] memory registrations
+      bytes32 changeId,
+      SeriesPolicy memory policy,
+      Activation[4] memory activations
     )
   {
     require(block.chainid == LibShannonSetup.CHAIN_ID, "WRONG_CHAIN");
@@ -70,146 +72,160 @@ abstract contract ShannonMarketConfiguration is Script {
     uint256 headroom = vm.envOr("MARKET_EXPIRY_HEADROOM_SECONDS", uint256(6 hours));
     btc = LibShannonSetup.loadLiveMarket(btcMarketId, venueId, headroom);
     eth = LibShannonSetup.loadLiveMarket(ethMarketId, venueId, headroom);
+    require(btc.creator == eth.creator, "CREATOR_MISMATCH");
+    require(btc.originVenueId == eth.originVenueId, "VENUE_MISMATCH");
+    require(btc.originOperatorId == eth.originOperatorId, "OPERATOR_MISMATCH");
 
     uint256 minAgeValue = vm.envOr("ORACLE_MIN_AGE_SECONDS", uint256(60));
     uint256 updateIntervalValue = vm.envOr("ORACLE_UPDATE_INTERVAL_SECONDS", uint256(30));
     uint256 staleAfterValue = vm.envOr("ORACLE_STALE_AFTER_SECONDS", uint256(600));
+    uint256 minIntervalValue = vm.envOr("SERIES_MIN_INTERVAL_SECONDS", uint256(1 hours));
     require(minAgeValue <= type(uint40).max, "MIN_AGE_OVERFLOW");
     require(updateIntervalValue <= type(uint40).max, "UPDATE_INTERVAL_OVERFLOW");
     require(staleAfterValue <= type(uint40).max, "STALE_AFTER_OVERFLOW");
-    require(updateIntervalValue != 0, "ZERO_UPDATE_INTERVAL");
-    require(minAgeValue >= updateIntervalValue, "MIN_AGE_TOO_SHORT");
+    require(minIntervalValue <= type(uint64).max, "MIN_INTERVAL_OVERFLOW");
+    require(updateIntervalValue != 0 && minAgeValue >= updateIntervalValue, "ORACLE_TIMING");
     require(staleAfterValue >= minAgeValue, "STALE_BEFORE_MATURE");
+    require(minIntervalValue > 1_200 + minAgeValue, "MIN_INTERVAL_TOO_SHORT");
 
-    uint40 minAge = uint40(minAgeValue);
-    uint40 updateInterval = uint40(updateIntervalValue);
-    uint40 staleAfter = uint40(staleAfterValue);
-    registrations[0] = _registration(btc.yesKey, 0, BTC_GROUP, minAge, updateInterval, staleAfter);
-    registrations[1] = _registration(btc.noKey, 1, BTC_GROUP, minAge, updateInterval, staleAfter);
-    registrations[2] = _registration(eth.yesKey, 0, ETH_GROUP, minAge, updateInterval, staleAfter);
-    registrations[3] = _registration(eth.noKey, 1, ETH_GROUP, minAge, updateInterval, staleAfter);
+    GenerationConfig memory generation =
+      LibShannonSetup.generationConfig(btc.yesKey, 0, bytes32(uint256(1)));
+    OracleConfig memory oracle = LibShannonSetup.oracleConfig(
+      btc.yesKey, uint40(minAgeValue), uint40(updateIntervalValue), uint40(staleAfterValue)
+    );
+    policy = SeriesPolicy({
+      creator: btc.creator,
+      originVenueId: btc.originVenueId,
+      originOperatorId: btc.originOperatorId,
+      collateral: btc.yesKey.collateral,
+      minIntervalSec: uint64(minIntervalValue),
+      risk: generation.risk,
+      oracle: SeriesOracleConfig({
+        minAge: oracle.minAge,
+        updateInterval: oracle.updateInterval,
+        staleAfter: oracle.staleAfter,
+        depthQuantity: oracle.depthQuantity,
+        maxObservations: oracle.maxObservations,
+        maxBookLevels: oracle.maxBookLevels
+      }),
+      enabled: true,
+      frozen: false
+    });
+    changeId = keccak256(abi.encode("REGISTER_SHANNON_SERIES_POLICY_V1", POLICY_ID));
+    activations[0] = _activation(btc.yesKey, 0);
+    activations[1] = _activation(btc.noKey, 1);
+    activations[2] = _activation(eth.yesKey, 0);
+    activations[3] = _activation(eth.noKey, 1);
   }
 
-  /// @notice Builds one deterministic registration.
-  /// @param key Exact DreamDEX generation tuple.
+  /// @notice Constructs one exact activation descriptor.
+  /// @param key Current DreamDEX generation tuple.
   /// @param outcomeIndex Zero for YES or one for NO.
-  /// @param marketGroup Shared daily-market debt group.
-  /// @param minAge Minimum mature observation age.
-  /// @param updateInterval Minimum interval between observations.
-  /// @param staleAfter Maximum newest-observation age.
-  /// @return registration Controller, oracle, and delayed-governance values.
-  function _registration(
-    MarketKey memory key,
-    uint8 outcomeIndex,
-    bytes32 marketGroup,
-    uint40 minAge,
-    uint40 updateInterval,
-    uint40 staleAfter
-  ) private pure returns (Registration memory registration) {
-    registration.generationKey = LibDreamMarginStorage.generationKey(key);
-    registration.changeId = LibShannonSetup.registrationChangeId(registration.generationKey);
-    registration.generation = LibShannonSetup.generationConfig(key, outcomeIndex, marketGroup);
-    registration.oracle = LibShannonSetup.oracleConfig(key, minAge, updateInterval, staleAfter);
+  /// @return activation Derived activation descriptor.
+  function _activation(MarketKey memory key, uint8 outcomeIndex)
+    private
+    pure
+    returns (Activation memory activation)
+  {
+    activation = Activation({
+      generationKey: LibDreamMarginStorage.generationKey(key), key: key, outcomeIndex: outcomeIndex
+    });
   }
 
-  /// @notice Requires one executed registration to match both subsystems exactly.
-  /// @param deployment Deployed controller and oracle.
-  /// @param registration Expected complete registration.
-  function _assertRegistration(
+  /// @notice Verifies one activated controller/oracle outcome against its policy link.
+  /// @param deployment Deployed controller and oracle addresses.
+  /// @param activation Expected current outcome generation.
+  function _assertActivation(
     LibShannonSetup.Deployment memory deployment,
-    Registration memory registration
+    Activation memory activation
   ) internal view {
-    GenerationConfig memory generation = IDreamMarginController(deployment.controller)
-      .getGeneration(registration.generationKey);
-    (OracleConfig memory oracle, ObservationRing memory ring) =
-      IDreamDexMarkOracle(deployment.oracle).generationState(registration.generationKey);
+    IDreamMarginController controller = IDreamMarginController(deployment.controller);
+    GenerationConfig memory generation = controller.getGeneration(activation.generationKey);
+    (OracleConfig memory oracle,) =
+      IDreamDexMarkOracle(deployment.oracle).generationState(activation.generationKey);
     require(generation.enabled && !generation.frozen, "GENERATION_NOT_ACTIVE");
+    require(generation.risk.outcomeIndex == activation.outcomeIndex, "OUTCOME_INDEX");
+    require(controller.policyForGeneration(activation.generationKey) == POLICY_ID, "POLICY_LINK");
     require(
-      keccak256(abi.encode(generation)) == keccak256(abi.encode(registration.generation)),
-      "GENERATION_POLICY"
+      LibDreamMarginStorage.generationKey(oracle.key) == activation.generationKey, "ORACLE_KEY"
     );
-    require(
-      keccak256(abi.encode(oracle)) == keccak256(abi.encode(registration.oracle)), "ORACLE_POLICY"
-    );
-    require(ring.cardinality == 0, "UNEXPECTED_OBSERVATIONS");
   }
 }
 
-/// @notice Commits the exact four-registration payloads to delayed governance.
-contract ScheduleShannonMarkets is ShannonMarketConfiguration {
-  /// @notice Schedules BTC and ETH daily YES/NO registrations.
+/// @notice Commits the reusable origin policy to delayed governance.
+contract ScheduleShannonMarkets is ShannonSeriesConfiguration {
+  /// @notice Schedules the single BTC/ETH origin policy.
   function run() external {
     (
       uint256 privateKey,
       LibShannonSetup.Deployment memory deployment,,,
-      Registration[4] memory registrations
+      bytes32 changeId,
+      SeriesPolicy memory policy,
     ) = _configuration();
-    IDreamMarginController controller = IDreamMarginController(deployment.controller);
-
     vm.startBroadcast(privateKey);
-    for (uint256 i = 0; i < registrations.length; ++i) {
-      Registration memory registration = registrations[i];
-      controller.scheduleGenerationChange(
-        registration.changeId,
-        registration.generationKey,
-        registration.generation,
-        registration.oracle
-      );
-    }
+    IDreamMarginController(deployment.controller)
+      .scheduleSeriesPolicyChange(changeId, POLICY_ID, policy);
     vm.stopBroadcast();
   }
 }
 
-/// @notice Executes the already committed registrations after their delay.
-contract ExecuteShannonMarkets is ShannonMarketConfiguration {
+/// @notice Executes the origin policy and permissionlessly activates current generations.
+contract ExecuteShannonMarkets is ShannonSeriesConfiguration {
   string private constant _OUTPUT = "deployments/shannon-market-configuration.json";
 
-  /// @notice Registers and verifies BTC and ETH daily YES/NO generations.
+  /// @notice Registers one policy, activates four outcomes, verifies them, and writes a manifest.
   function run() external {
     (
       uint256 privateKey,
       LibShannonSetup.Deployment memory deployment,
       LibShannonSetup.LiveMarket memory btc,
       LibShannonSetup.LiveMarket memory eth,
-      Registration[4] memory registrations
+      bytes32 changeId,
+      SeriesPolicy memory policy,
+      Activation[4] memory activations
     ) = _configuration();
     IDreamMarginController controller = IDreamMarginController(deployment.controller);
 
     vm.startBroadcast(privateKey);
-    for (uint256 i = 0; i < registrations.length; ++i) {
-      Registration memory registration = registrations[i];
-      controller.executeGenerationChange(
-        registration.changeId,
-        registration.generationKey,
-        registration.generation,
-        registration.oracle
-      );
+    controller.executeSeriesPolicyChange(changeId, POLICY_ID, policy);
+    for (uint256 i = 0; i < activations.length; ++i) {
+      controller.activateSeriesGeneration(activations[i].key, activations[i].outcomeIndex);
     }
     vm.stopBroadcast();
 
-    for (uint256 i = 0; i < registrations.length; ++i) {
-      _assertRegistration(deployment, registrations[i]);
+    for (uint256 i = 0; i < activations.length; ++i) {
+      _assertActivation(deployment, activations[i]);
     }
-    _writeManifest(deployment, btc, eth, registrations);
+    _writeManifest(deployment, btc, eth, changeId, policy, activations);
   }
 
-  /// @notice Writes the selected generations and exact registration identities.
+  /// @notice Writes the reusable policy and current activated outcomes.
   /// @param deployment Deployed stack.
   /// @param btc Selected BTC daily generation.
   /// @param eth Selected ETH daily generation.
-  /// @param registrations Four executed outcome policies.
+  /// @param changeId Executed delayed-policy identifier.
+  /// @param policy Executed reusable policy.
+  /// @param activations Four activated current outcomes.
   function _writeManifest(
     LibShannonSetup.Deployment memory deployment,
     LibShannonSetup.LiveMarket memory btc,
     LibShannonSetup.LiveMarket memory eth,
-    Registration[4] memory registrations
+    bytes32 changeId,
+    SeriesPolicy memory policy,
+    Activation[4] memory activations
   ) private {
     string memory object = "dreammargin-shannon-markets";
-    vm.serializeString(object, "schema", "dreammargin.shannon-markets.v1");
+    vm.serializeString(object, "schema", "dreammargin.shannon-markets.v2");
     vm.serializeUint(object, "chainId", LibShannonSetup.CHAIN_ID);
     vm.serializeUint(object, "configuredAtBlock", block.number);
     vm.serializeAddress(object, "controller", deployment.controller);
     vm.serializeAddress(object, "oracle", deployment.oracle);
+    vm.serializeBytes32(object, "policyId", POLICY_ID);
+    vm.serializeBytes32(object, "policyChangeId", changeId);
+    vm.serializeAddress(object, "creator", policy.creator);
+    vm.serializeBytes32(object, "venueId", policy.originVenueId);
+    vm.serializeUint(object, "operatorId", policy.originOperatorId);
+    vm.serializeUint(object, "minimumIntervalSeconds", policy.minIntervalSec);
     vm.serializeBytes32(object, "btcMarketId", btc.marketId);
     vm.serializeAddress(object, "btcMarket", btc.market);
     vm.serializeAddress(object, "btcPool", btc.pool);
@@ -220,18 +236,14 @@ contract ExecuteShannonMarkets is ShannonMarketConfiguration {
     vm.serializeAddress(object, "ethPool", eth.pool);
     vm.serializeUint(object, "ethNonce", eth.nonce);
     vm.serializeUint(object, "ethExpiry", eth.expiry);
-    vm.serializeBytes32(object, "btcYesGenerationKey", registrations[0].generationKey);
-    vm.serializeBytes32(object, "btcNoGenerationKey", registrations[1].generationKey);
-    vm.serializeBytes32(object, "ethYesGenerationKey", registrations[2].generationKey);
-    vm.serializeBytes32(object, "ethNoGenerationKey", registrations[3].generationKey);
-    vm.serializeBytes32(object, "btcYesChangeId", registrations[0].changeId);
-    vm.serializeBytes32(object, "btcNoChangeId", registrations[1].changeId);
-    vm.serializeBytes32(object, "ethYesChangeId", registrations[2].changeId);
-    vm.serializeBytes32(object, "ethNoChangeId", registrations[3].changeId);
-    vm.serializeUint(object, "oracleMinAgeSeconds", registrations[0].oracle.minAge);
-    vm.serializeUint(object, "oracleUpdateIntervalSeconds", registrations[0].oracle.updateInterval);
+    vm.serializeBytes32(object, "btcYesGenerationKey", activations[0].generationKey);
+    vm.serializeBytes32(object, "btcNoGenerationKey", activations[1].generationKey);
+    vm.serializeBytes32(object, "ethYesGenerationKey", activations[2].generationKey);
+    vm.serializeBytes32(object, "ethNoGenerationKey", activations[3].generationKey);
+    vm.serializeUint(object, "oracleMinAgeSeconds", policy.oracle.minAge);
+    vm.serializeUint(object, "oracleUpdateIntervalSeconds", policy.oracle.updateInterval);
     string memory json =
-      vm.serializeUint(object, "oracleStaleAfterSeconds", registrations[0].oracle.staleAfter);
+      vm.serializeUint(object, "oracleStaleAfterSeconds", policy.oracle.staleAfter);
     vm.writeJson(json, _OUTPUT);
   }
 }
