@@ -1,14 +1,49 @@
 # DreamMargin
 
-DreamMargin is an isolated leverage and credit layer for DreamDEX binary event
-markets on Somnia. Traders use tUSDC and vault credit to acquire a larger YES
-or NO position, while liquidity providers supply the collateral that funds the
-credit.
+**DreamDEX creates markets for the future. DreamMargin gives conviction more
+buying power.**
 
-The protocol does not create a separate synthetic market or decide the result
-of an event. Trading, outcome tokens, market expiry, and resolution remain on
-DreamDEX. DreamMargin adds bounded borrowing, position accounting, risk checks,
-liquidation, and lender accounting around those existing markets.
+Prediction markets turn information into prices, but ordinary outcome trading
+is fully funded: every YES or NO share must be paid for when the trade opens.
+That limits the size of a position to the capital already sitting in a trader's
+wallet.
+
+DreamMargin adds permissionless margin to DreamDEX. A trader contributes
+collateral, the DreamMargin vault supplies bounded credit, and the combined
+buying power purchases real outcome shares from the live DreamDEX order book.
+Those shares remain inside an isolated position and secure its debt.
+
+DreamMargin does not create synthetic markets, discount outcome shares, or
+decide event results. DreamDEX continues to own trading, expiry, resolution,
+and redemption. DreamMargin provides the financing and risk layer around it.
+
+## Why Prediction Markets Need Capital Efficiency
+
+A trader with 50 tUSDC can normally spend at most 50 tUSDC on a forecast. With
+1.5x leverage, the same contribution can target approximately 75 tUSDC of
+DreamDEX buying power:
+
+```text
+trader margin + vault credit = total buying power
+50 tUSDC      + 25 tUSDC     = 75 tUSDC
+```
+
+The exact shares received depend on executable price, order-book depth, spread,
+fees, and protocol risk limits. When the position closes, its shares are sold
+or redeemed, the vault is repaid first, and the remaining equity returns to the
+trader:
+
+```text
+position value - debt - interest - fees = trader equity
+```
+
+Leverage magnifies both outcomes. A favorable probability move increases the
+return on the trader's margin; an adverse move consumes that margin faster and
+can make the position liquidatable before the event resolves.
+
+Liquidity providers make this capital efficiency possible. They deposit tUSDC
+into an ERC-4626 vault and earn financing revenue for supplying credit to
+isolated, outcome-backed positions.
 
 The current deployment is an experimental Shannon testnet release. Its tUSDC,
 markets, prices, and returns have no mainnet value. The contracts have not been

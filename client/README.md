@@ -7,6 +7,12 @@ markets in `contracts/deployments/shannon-frontend.json`. It reads market books,
 oracle state, eligibility, balances, vault state, and paginated positions from
 public chain RPC calls. It does not require a DreamMargin backend or a log scan.
 
+The deployed application has no recurring script, cron job, or off-chain keeper
+to operate. Somnia Reactivity updates the oracle when either supported market
+trades, and protocol writes can refresh stale observations permissionlessly.
+The generated deployment bindings and ABIs are committed, so a host only needs
+to install dependencies and build the client.
+
 ## Commands
 
 ```sh
@@ -23,8 +29,9 @@ npm run generate     # refresh deployment bindings and contract ABIs
 Run the formatter, linter, type checker, tests, and production build before
 requesting review.
 
-Run `npm run generate` whenever the contracts are redeployed or their public ABI
-changes. Do not hand-edit generated files under `src/config` or `src/web3/abis`.
+`npm run generate` is a one-time development command after a contract redeploy or
+public ABI change; it is not a production process. Do not hand-edit generated
+files under `src/config` or `src/web3/abis`.
 
 ## Conventions
 
