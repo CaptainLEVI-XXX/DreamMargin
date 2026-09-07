@@ -25,8 +25,8 @@ VAULT_TARGET="${DEMO_VAULT_TARGET:-50000000000}"
 BOOK_QUANTITY="${DEMO_BOOK_QUANTITY:-50000000000}"
 ORACLE_DEPTH="${DEMO_ORACLE_DEPTH:-25000000000}"
 FAUCET_CHUNK="${DEMO_FAUCET_CHUNK:-10000000000}"
-YES_BID="${DEMO_YES_BID:-450000}"
-YES_ASK="${DEMO_YES_ASK:-550000}"
+YES_BID="${DEMO_YES_BID:-495000}"
+YES_ASK="${DEMO_YES_ASK:-505000}"
 MINIMUM_HEADROOM="${DEMO_MIN_LIFETIME_SECONDS:-2678400}"
 MARKETS_SIGNATURE='markets(bytes32)(uint256,uint8,uint8,address,uint32,bytes32,address,address,address,address,uint256,uint256,uint64,uint64)'
 ORDER_SIGNATURE='placeBinaryOrder(uint8,uint256,uint256,uint64,uint8,uint8,address,uint96,uint64)(bool,uint128)'
@@ -102,18 +102,18 @@ seed_market() {
   bid_depth=0
   ask_depth=0
   if (( $(jq -r '.[0] | length' <<<"$bids") != 0 )); then
-    if (( $(jq -r '.[0][0][0]' <<<"$bids") != YES_BID )); then
-      echo "$symbol best bid is not the configured demo price." >&2
-      exit 1
+    if (( $(jq -r '.[0][0][0]' <<<"$bids") == YES_BID )); then
+      bid_depth="$(jq -r '.[0][0][1]' <<<"$bids")"
+    else
+      echo "$symbol will add a tighter configured bid above the existing level."
     fi
-    bid_depth="$(jq -r '.[0][0][1]' <<<"$bids")"
   fi
   if (( $(jq -r '.[0] | length' <<<"$asks") != 0 )); then
-    if (( $(jq -r '.[0][0][0]' <<<"$asks") != YES_ASK )); then
-      echo "$symbol best ask is not the configured demo price." >&2
-      exit 1
+    if (( $(jq -r '.[0][0][0]' <<<"$asks") == YES_ASK )); then
+      ask_depth="$(jq -r '.[0][0][1]' <<<"$asks")"
+    else
+      echo "$symbol will add a tighter configured ask below the existing level."
     fi
-    ask_depth="$(jq -r '.[0][0][1]' <<<"$asks")"
   fi
   bid_deficit=0
   ask_deficit=0
@@ -155,14 +155,14 @@ seed_market() {
   if (( ask_deficit != 0 )); then
     send_checked yes_approve_tx "$symbol YES approval" "$OUTCOME_TOKEN" \
       'approve(address,uint256,uint256)(bool)' "$pool" "$yes_id" "$ask_deficit"
-    send_checked ask_tx "$symbol 0.55 YES ask" "$pool" "$ORDER_SIGNATURE" \
+    send_checked ask_tx "$symbol configured YES ask" "$pool" "$ORDER_SIGNATURE" \
       1 "$YES_ASK" "$ask_deficit" "$expiry_ns" 0 0 \
       0x0000000000000000000000000000000000000000 0 0
   fi
   if (( bid_deficit != 0 )); then
     send_checked no_approve_tx "$symbol NO approval" "$OUTCOME_TOKEN" \
       'approve(address,uint256,uint256)(bool)' "$pool" "$no_id" "$bid_deficit"
-    send_checked bid_tx "$symbol 0.45 YES bid" "$pool" "$ORDER_SIGNATURE" \
+    send_checked bid_tx "$symbol configured YES bid" "$pool" "$ORDER_SIGNATURE" \
       3 "$YES_BID" "$bid_deficit" "$expiry_ns" 0 0 \
       0x0000000000000000000000000000000000000000 0 0
   fi
