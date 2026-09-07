@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planAcquisition, quoteBuy, type BookLevel } from "./bookQuote";
+import { planAcquisition, quoteBuy, quoteSell, type BookLevel } from "./bookQuote";
 
 const ONE = 1_000_000n;
 const LOT = 1_000n;
@@ -144,6 +144,32 @@ describe("quoteBuy for NO", () => {
       lotSize: LOT,
     });
     expect(no.cost).toBeLessThan(yes.cost);
+  });
+});
+
+describe("quoteSell", () => {
+  it("values an immediate YES exit against bids, not the midpoint", () => {
+    const q = quoteSell({
+      side: "yes",
+      levels: [{ yesPrice: 450_000n, quantity: 200n * ONE }],
+      quantity: 100n * ONE,
+      oneCollateral: ONE,
+      lotSize: LOT,
+    });
+    expect(q.proceeds).toBe(45n * ONE);
+    expect(q.averagePrice).toBe(450_000n);
+  });
+
+  it("values a NO exit as the complement of the YES ask", () => {
+    const q = quoteSell({
+      side: "no",
+      levels: [{ yesPrice: 550_000n, quantity: 200n * ONE }],
+      quantity: 100n * ONE,
+      oneCollateral: ONE,
+      lotSize: LOT,
+    });
+    expect(q.proceeds).toBe(45n * ONE);
+    expect(q.averagePrice).toBe(450_000n);
   });
 });
 

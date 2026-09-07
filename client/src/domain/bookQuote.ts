@@ -1,4 +1,4 @@
-import { formatUnits, mulDivUp, quantizeDown } from "./amounts";
+import { formatUnits, mulDivDown, mulDivUp, quantizeDown } from "./amounts";
 
 /**
  * Bounded order-book walk.
@@ -31,6 +31,19 @@ export type BookQuote = {
   /** Worst YES price touched, for the venue limit argument. */
   limitYesPrice: bigint;
   /** Average price paid per share, for display. */
+  averagePrice: bigint;
+};
+
+export type SaleQuote = {
+  /** Shares the visible book can buy. */
+  fillable: bigint;
+  /** Shares that cannot be sold into visible bids. */
+  shortfall: bigint;
+  /** Collateral returned by the visible fill, rounded down. */
+  proceeds: bigint;
+  /** Worst YES-denominated price touched. */
+  limitYesPrice: bigint;
+  /** Average selected-outcome sale price. */
   averagePrice: bigint;
 };
 
@@ -74,6 +87,46 @@ export function quoteBuy(input: {
     cost,
     limitYesPrice: worstYes,
     averagePrice: fillable === 0n ? 0n : mulDivUp(cost, input.oneCollateral, fillable),
+  };
+}
+
+/**
+ * Walk the executable exit side for one outcome.
+ *
+ * Selling YES consumes YES bids. Selling NO consumes YES asks because the NO
+ * price is their complement. Proceeds round down to match the conservative
+ * amount the owner can actually receive.
+ */
+export function quoteSell(input: {
+  side: Side;
+  levels: readonly BookLevel[];
+  quantity: bigint;
+  oneCollateral: bigint;
+  lotSize: bigint;
+}): SaleQuote {
+  const wanted = quantizeDown(input.quantity, input.lotSize);
+  let remaining = wanted;
+  let proceeds = 0n;
+  let worstYes = 0n;
+
+  for (const level of input.levels) {
+    if (remaining === 0n) break;
+    const take = level.quantity < remaining ? level.quantity : remaining;
+    if (take === 0n) continue;
+
+    const received = input.side === "yes" ? level.yesPrice : input.oneCollateral - level.yesPrice;
+    proceeds += mulDivDown(take, received, input.oneCollateral);
+    remaining -= take;
+    worstYes = level.yesPrice;
+  }
+
+  const fillable = wanted - remaining;
+  return {
+    fillable,
+    shortfall: remaining,
+    proceeds,
+    limitYesPrice: worstYes,
+    averagePrice: fillable === 0n ? 0n : mulDivDown(proceeds, input.oneCollateral, fillable),
   };
 }
 

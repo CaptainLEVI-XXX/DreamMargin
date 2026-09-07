@@ -78,20 +78,23 @@ export function useIntentRunner(
         },
       });
 
-      return runIntent(
-        createIntent(action.reviewed),
-        action.plan,
-        capabilities,
-        deps,
-        setIntent,
-      ).catch((error: unknown) => {
-        setIntent((current) =>
-          current === null
-            ? current
-            : transition(current, { type: "failed", message: explainRevert(error) }),
-        );
-        return undefined;
-      });
+      return runIntent(createIntent(action.reviewed), action.plan, capabilities, deps, setIntent)
+        .then((result) => {
+          if (result.state.name === "success") {
+            // Show confirmation briefly, then restore the refreshed action
+            // surface without requiring a redundant Continue click.
+            window.setTimeout(() => setIntent(null), 1_200);
+          }
+          return result;
+        })
+        .catch((error: unknown) => {
+          setIntent((current) =>
+            current === null
+              ? current
+              : transition(current, { type: "failed", message: explainRevert(error) }),
+          );
+          return undefined;
+        });
     },
     [account, capabilities, onSettled],
   );

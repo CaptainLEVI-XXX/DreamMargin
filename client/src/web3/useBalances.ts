@@ -13,8 +13,8 @@ import { EMPTY_BALANCES, readBalances, type Balances } from "./tokens";
  * switch renders empty without a synchronous setState cascading renders, and a
  * response for a previous account is never displayed against a new one.
  */
-export function useBalances(account: Address | null, yesId: bigint, noId: bigint) {
-  const key = `${account ?? "none"}|${yesId}|${noId}`;
+export function useBalances(account: Address | null, yesId: bigint, noId: bigint, pool: Address) {
+  const key = `${account ?? "none"}|${yesId}|${noId}|${pool}`;
   const [entry, setEntry] = useState<{ key: string; balances: Balances }>({
     key,
     balances: EMPTY_BALANCES,
@@ -27,7 +27,7 @@ export function useBalances(account: Address | null, yesId: bigint, noId: bigint
     if (account === null) return;
     let cancelled = false;
 
-    void readBalances(createReadClient(), account, yesId, noId)
+    void readBalances(createReadClient(), account, yesId, noId, pool)
       .then((balances) => {
         if (!cancelled) setEntry({ key, balances });
       })
@@ -38,7 +38,7 @@ export function useBalances(account: Address | null, yesId: bigint, noId: bigint
     return () => {
       cancelled = true;
     };
-  }, [key, account, yesId, noId, version]);
+  }, [key, account, yesId, noId, pool, version]);
 
   return { balances: entry.key === key ? entry.balances : EMPTY_BALANCES, refresh };
 }

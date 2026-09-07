@@ -317,6 +317,18 @@
     background var(--dm-transition);
 }
 
+.dm-side-quotes {
+  display: grid;
+  gap: 3px;
+  color: var(--dm-muted);
+  font-size: var(--dm-size-11);
+  text-align: right;
+}
+
+.dm-side-quotes .dm-value {
+  color: var(--dm-ink);
+}
+
 .dm-side-option:hover {
   border-color: #45433f;
   background: #1b1a16;
@@ -366,6 +378,21 @@
   outline: none;
 }
 
+.dm-amount-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--dm-space);
+}
+
+.dm-amount-input > span {
+  padding-bottom: 11px;
+  color: var(--dm-text);
+  font-size: var(--dm-size-13);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .dm-share-presets {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -396,6 +423,25 @@
 .dm-trade-summary dd {
   color: var(--dm-ink);
   font-size: var(--dm-size-17);
+}
+
+.dm-order-details {
+  margin-top: var(--dm-space);
+  border-bottom: 1px solid var(--dm-line);
+}
+
+.dm-order-details summary {
+  padding: var(--dm-space) 0;
+  color: var(--dm-muted);
+  font-family: var(--dm-font-mono);
+  font-size: var(--dm-size-11);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.dm-order-details .dm-market-facts {
+  padding-bottom: var(--dm-space);
 }
 
 .dm-trade > .dm-card .dm-buffer {

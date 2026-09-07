@@ -86,6 +86,7 @@ export function useMarkets(account: Address | null, refreshKey = 0): MarketsStat
                     account,
                     candidate.yesKey.outcomeId,
                     candidate.noKey.outcomeId,
+                    candidate.yesKey.pool as Address,
                   ),
             ]);
             const quoted = midPrice(book, candidate.oneCollateral);

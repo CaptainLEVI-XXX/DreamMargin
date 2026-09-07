@@ -51,6 +51,7 @@ export default function App() {
     account,
     selected.key.outcomeId,
     selected.key.outcomeId + 1n,
+    selected.key.pool as `0x${string}`,
   );
   const faucet = useIntentRunner(account, { atomicBatch: false }, refresh);
   const { state: positionsState, refresh: refreshPositions } = usePositions(account, liveMarkets);
@@ -93,7 +94,7 @@ export default function App() {
         account === null ? null : (
           <HeaderFunds
             collateral={balances.collateral}
-            onFaucet={() => faucet.run(faucetIntent(1_000_000_000n))}
+            onFaucet={() => faucet.run(faucetIntent(1_000_000_000n, balances.collateralAllowance))}
           />
         )
       }

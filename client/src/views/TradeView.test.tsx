@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { TradeView } from "./TradeView";
@@ -30,11 +30,15 @@ function view(over: Partial<Parameters<typeof TradeView>[0]> = {}) {
   );
 }
 
+async function selectTier(index: number) {
+  await userEvent.click(screen.getAllByRole("radio")[index]);
+}
+
 describe("layout", () => {
   it("puts the question and chart alongside one action panel", () => {
     render(view());
     expect(screen.getByRole("heading", { name: /Will ETH close/ })).toBeVisible();
-    expect(screen.getByLabelText("Position size in shares")).toBeVisible();
+    expect(screen.getByLabelText("tUSDC amount")).toBeVisible();
   });
 
   it("offers useful ranges for a long-duration market", () => {
@@ -63,6 +67,20 @@ describe("layout", () => {
     expect(screen.getByRole("button", { name: /^NO/ })).toBeVisible();
   });
 
+  it("shows executable buy and sell prices instead of only the midpoint", () => {
+    render(
+      view({
+        market: { ...market, yesPrice: 500_000n },
+        book: {
+          asks: [{ yesPrice: 550_000n, quantity: 500_000_000n }],
+          bids: [{ yesPrice: 450_000n, quantity: 500_000_000n }],
+        },
+      }),
+    );
+    expect(screen.getByRole("button", { name: /YESBuy 55.*Sell 45/i })).toBeVisible();
+    expect(screen.getByRole("button", { name: /NOBuy 55.*Sell 45/i })).toBeVisible();
+  });
+
   it("shows YES and NO as selected-versus-neutral, never green versus red", () => {
     const { container } = render(view());
     const yes = screen.getByRole("button", { name: /^YES/ });
@@ -81,82 +99,69 @@ describe("layout", () => {
 describe("the tier row is the action", () => {
   it("labels 1x as a plain purchase", async () => {
     render(view());
-    await userEvent.click(screen.getByRole("radio", { name: "1x" }));
-    expect(screen.getByRole("button", { name: /^Buy 5 YES$/ })).toBeVisible();
-    expect(screen.getByText(/normal DreamDEX purchase with no borrowing/i)).toBeVisible();
+    await selectTier(0);
+    expect(screen.getByRole("button", { name: /^Buy YES$/ })).toBeVisible();
+    expect(screen.getByText(/without borrowing/i)).toBeVisible();
   });
 
-  it("labels a leveraged tier with the multiple", async () => {
+  it("keeps the action focused on the position rather than its funding math", async () => {
     render(view());
-    await userEvent.click(screen.getByRole("radio", { name: "1.5x" }));
-    expect(screen.getByRole("button", { name: /Open 1\.5x position/ })).toBeVisible();
+    await userEvent.click(screen.getByRole("radio", { name: "1.25x" }));
+    expect(screen.getByRole("button", { name: "Open YES position" })).toBeVisible();
+    expect(screen.getByText(/without calculating the borrowing/i)).toBeVisible();
   });
 
-  it("shows borrowing only above 1x", async () => {
+  it("shows clean achievable choices and an honest market-specific maximum", async () => {
     render(view());
-    await userEvent.click(screen.getByRole("radio", { name: "1x" }));
-    expect(screen.queryByText("Vault credit")).toBeNull();
-    await userEvent.click(screen.getByRole("radio", { name: "1.5x" }));
-    expect(screen.getByText("Vault credit")).toBeVisible();
+    await userEvent.click(screen.getByRole("radio", { name: "Max 1.44x" }));
+    expect(screen.getByRole("radio", { name: "Max 1.44x" })).toBeChecked();
+    expect(screen.queryByRole("radio", { name: "2x" })).toBeNull();
   });
 
   it("defaults to the lowest useful tier, never the maximum", () => {
     render(view());
-    expect(screen.getByRole("radio", { name: "1.25x" })).toBeChecked();
-    expect(screen.getByRole("radio", { name: "2x" })).not.toBeChecked();
+    const options = screen.getAllByRole("radio");
+    expect(options[1]).toBeChecked();
+    expect(options[options.length - 1]).not.toBeChecked();
   });
 
   it("does not expose wallet-step counting as product copy", async () => {
     render(view());
-    await userEvent.click(screen.getByRole("radio", { name: "1x" }));
+    await selectTier(0);
     expect(screen.queryByText(/wallet confirmations?/i)).toBeNull();
-    await userEvent.click(screen.getByRole("radio", { name: "1.5x" }));
+    await selectTier(2);
     expect(screen.queryByText(/wallet confirmations?/i)).toBeNull();
   });
 });
 
-describe("book depth and minting", () => {
+describe("book depth", () => {
   it("says nothing when the book covers the size", () => {
     render(view());
     expect(screen.queryByText(/minting the rest/i)).toBeNull();
   });
 
-  it("explains the mint fallback and that it returns the other outcome", async () => {
+  it("never invents shares beyond visible order-book depth", async () => {
     render(view({ book: { asks: [{ yesPrice: 983_000n, quantity: 1_000_000n }], bids: [] } }));
-    await userEvent.click(screen.getByRole("radio", { name: "1x" }));
-    expect(screen.getByText(/minting the remaining/i)).toBeVisible();
-    expect(screen.getByText(/NO shares/)).toBeVisible();
+    await selectTier(0);
+    const summary = screen.getByText("You receive").closest("dl");
+    expect(summary).not.toBeNull();
+    expect(within(summary!).getByText("1")).toBeVisible();
+    expect(screen.queryByText(/mint/i)).toBeNull();
   });
 
-  it("states amounts in shares, never native units", async () => {
-    render(view({ book: { asks: [{ yesPrice: 983_000n, quantity: 1_000_000n }], bids: [] } }));
-    await userEvent.click(screen.getByRole("radio", { name: "1x" }));
-    // "1 of 5", not "1000000 of 5000000".
-    const note = screen.getByText(/book covers 1 of 5/i);
-    expect(note).not.toHaveTextContent(/\d{7,}/);
-  });
-
-  it("says plainly when the book is empty rather than implying partial cover", async () => {
+  it("says plainly when the selected side has no liquidity", () => {
     render(view({ book: { asks: [], bids: [] } }));
-    await userEvent.click(screen.getByRole("radio", { name: "1x" }));
-    expect(screen.getByText(/order book has no YES for sale/i)).toBeVisible();
+    expect(screen.getByRole("button", { name: /buy yes/i })).toBeDisabled();
+    expect(screen.getByText(/order book has no liquidity/i)).toBeVisible();
   });
 });
 
 describe("honest pricing", () => {
-  it("shows the effective price paid, not the market price, when minting", async () => {
-    // An empty book means every share is minted at one whole unit, so the
-    // market price is not what is being paid.
-    render(view({ book: { asks: [], bids: [] } }));
-    await userEvent.click(screen.getByRole("radio", { name: "1x" }));
-    expect(screen.getByText("Average price")).toBeVisible();
-    expect(screen.getByText("100¢")).toBeVisible();
-  });
-
-  it("shows the book price when the book fills the order", async () => {
+  it("shows the value actually available from the entered wallet budget", async () => {
     render(view());
-    await userEvent.click(screen.getByRole("radio", { name: "1x" }));
-    expect(screen.getByText("98.3¢")).toBeVisible();
+    await selectTier(0);
+    expect(screen.getByText("Position exposure")).toBeVisible();
+    expect(screen.getAllByText("49.99 tUSDC").length).toBeGreaterThan(0);
   });
 
   it("refuses to present a stale oracle's mark as a real value", () => {
@@ -175,45 +180,86 @@ describe("honest pricing", () => {
 describe("vault cash", () => {
   it("blocks leverage and offers to supply when the vault is empty", async () => {
     render(view({ vault: emptyVault }));
-    await userEvent.click(screen.getByRole("radio", { name: "1.5x" }));
-    expect(screen.getByRole("button", { name: /open 1\.5x position/i })).toBeDisabled();
+    await userEvent.click(screen.getByRole("radio", { name: "1.25x" }));
+    expect(screen.getByRole("button", { name: /open .* position/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /supply the vault/i })).toBeVisible();
   });
 
   it("still allows a spot purchase with an empty vault", async () => {
     render(view({ vault: emptyVault }));
-    await userEvent.click(screen.getByRole("radio", { name: "1x" }));
-    expect(screen.getByRole("button", { name: /^Buy 5 YES$/ })).toBeEnabled();
+    await selectTier(0);
+    expect(screen.getByRole("button", { name: /^Buy YES$/ })).toBeEnabled();
   });
 });
 
 describe("direct collateral opening", () => {
-  it("does not add a pre-buy even when the wallet already holds outcomes", async () => {
-    render(view({ balances: { ...EMPTY_BALANCES, yes: 100_000_000n } }));
+  it("turns a wallet budget and clean leverage choice into a position", async () => {
+    render(
+      view({
+        market: { ...market, yesPrice: 500_000n, riskMark: 450_000n },
+        book: {
+          asks: [{ yesPrice: 550_000n, quantity: 500_000_000n }],
+          bids: [{ yesPrice: 450_000n, quantity: 500_000_000n }],
+        },
+      }),
+    );
     await userEvent.click(screen.getByRole("radio", { name: "1.5x" }));
-    // The controller purchases the exact target from tUSDC; held outcomes are untouched.
-    expect(screen.getByRole("button", { name: /open 1\.5x position/i })).toBeVisible();
+
+    expect(screen.getByLabelText("tUSDC amount")).toHaveValue("50");
+    expect(screen.getByText("134.35")).toBeVisible();
+    expect(screen.getByText("134.35 tUSDC")).toBeVisible();
+    expect(screen.getByText("73.89 tUSDC")).toBeVisible();
+    expect(screen.getByText("49.25 tUSDC")).toBeVisible();
+    expect(screen.getByText("35.82 tUSDC")).toBeVisible();
+    await userEvent.click(screen.getByText("Order details"));
+    expect(screen.getByText("49.99 tUSDC")).toBeVisible();
+    expect(screen.getAllByText("1.5x").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole("button", { name: "Open YES position" })).toBeVisible();
   });
 
-  it("separates bounded owner tUSDC from vault credit and exposure", () => {
+  it("does not add a pre-buy even when the wallet already holds outcomes", async () => {
     render(view({ balances: { ...EMPTY_BALANCES, yes: 100_000_000n } }));
-    expect(screen.getByText("Expected from wallet")).toBeVisible();
-    expect(screen.getByText("Authorized maximum")).toBeVisible();
-    expect(screen.getByText("Vault credit")).toBeVisible();
+    await userEvent.click(screen.getByRole("radio", { name: "1.25x" }));
+    // The controller purchases the exact target from tUSDC; held outcomes are untouched.
+    expect(screen.getByRole("button", { name: /open .* position/i })).toBeVisible();
+  });
+
+  it("shows only the wallet input and resulting position", () => {
+    render(view({ balances: { ...EMPTY_BALANCES, yes: 100_000_000n } }));
+    expect(screen.getByLabelText("tUSDC amount")).toBeVisible();
+    expect(screen.getByText("You receive")).toBeVisible();
     expect(screen.getByText("Position exposure")).toBeVisible();
+    expect(screen.getByText("If closed now")).toBeVisible();
+    expect(screen.getByText("Maximum payout")).toBeVisible();
+    expect(screen.getByText("Estimated leverage")).toBeVisible();
+    expect(screen.queryByText("Borrowed from vault")).toBeNull();
+    expect(screen.queryByText("Conservative value")).toBeNull();
   });
 
   it("shows what the wallet holds on both sides", () => {
     render(view({ balances: { ...EMPTY_BALANCES, yes: 240_000_000n, no: 10_000_000n } }));
     expect(screen.getByText("You hold")).toBeVisible();
   });
+
+  it("keeps intermediate lending calculations out of the trade panel", async () => {
+    render(view());
+    await userEvent.click(screen.getByRole("radio", { name: "Max 1.44x" }));
+    const summary = screen.getByText("Estimated leverage").closest("dl");
+    expect(summary).not.toBeNull();
+    expect(within(summary!).queryByText(/debt|risk equity|price premium|vault credit/i)).toBeNull();
+  });
 });
 
 describe("guards", () => {
   it("requires a wallet before acting", () => {
     render(view({ account: null }));
-    expect(screen.getByRole("button", { name: /position|buy/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Open YES position" })).toBeDisabled();
     expect(screen.getAllByText(/connect a wallet to continue/i).length).toBeGreaterThan(0);
+  });
+
+  it("previews honest leverage before a wallet connects", () => {
+    render(view({ account: null }));
+    expect(screen.getByRole("radio", { name: "Max 1.44x" })).toBeVisible();
   });
 
   it("keeps one solid violet object", () => {

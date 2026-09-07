@@ -1,34 +1,35 @@
-import { formatMultiple, tiersFor } from "../domain/leverageTiers";
+export type LeverageOption = {
+  id: string;
+  label: string;
+};
 
 type Props = {
-  maxLeverageBps: bigint;
-  selected: bigint;
-  onSelect: (leverageBps: bigint) => void;
+  options: readonly LeverageOption[];
+  selected: string;
+  onSelect: (id: string) => void;
 };
 
 /**
- * Discrete tier chips. FS-2 replaces §8.3's 1x-5x slider because the deployed
- * maximum is 2.0x, where a slider gives coarse control and invites fiddling.
+ * Discrete cash-on-cash choices. Contract risk parameters are deliberately not
+ * rendered here: each option describes the leverage the current quote delivers.
  *
  * The selected chip uses the violet outline and tint treatment, never a solid
  * fill: §18.3 reserves the one solid violet object for the primary action.
  */
-export function LeverageTiers({ maxLeverageBps, selected, onSelect }: Props) {
-  const tiers = tiersFor(maxLeverageBps);
-
+export function LeverageTiers({ options, selected, onSelect }: Props) {
   return (
-    <div className="dm-tiers" role="radiogroup" aria-label="Leverage">
-      {tiers.map((tier) => (
+    <div className="dm-tiers" role="radiogroup" aria-label="Estimated leverage">
+      {options.map((option) => (
         <button
-          key={String(tier)}
+          key={option.id}
           type="button"
           role="radio"
-          aria-checked={tier === selected}
+          aria-checked={option.id === selected}
           className="dm-tier"
-          data-selected={tier === selected ? "" : undefined}
-          onClick={() => onSelect(tier)}
+          data-selected={option.id === selected ? "" : undefined}
+          onClick={() => onSelect(option.id)}
         >
-          {formatMultiple(tier)}
+          {option.label}
         </button>
       ))}
     </div>

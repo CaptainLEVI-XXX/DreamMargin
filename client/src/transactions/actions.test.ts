@@ -19,6 +19,7 @@ import {
   withdrawCollateralIntent,
   OrderKind,
   OrderType,
+  MAX_UINT256,
 } from "./actions";
 
 const POOL = "0x246a65643ad8b6c6dbd0b017a259da07681242fd" as const;
@@ -100,8 +101,14 @@ describe("expected events exist on-chain", () => {
 });
 
 describe("faucet", () => {
-  it("needs no approval", () => {
-    expect(faucetIntent(100n * USDC).plan.calls).toHaveLength(1);
+  it("establishes a reusable controller allowance before minting", () => {
+    const intent = faucetIntent(100n * USDC);
+    expect(intent.plan.calls.map((call) => call.kind)).toEqual(["approve-erc20", "action"]);
+    expect(intent.approval?.args).toEqual([DEPLOYMENT.controller, MAX_UINT256]);
+  });
+
+  it("does not repeat the approval once the reusable allowance exists", () => {
+    expect(faucetIntent(100n * USDC, MAX_UINT256).plan.calls).toHaveLength(1);
   });
 
   it("targets the collateral token", () => {
@@ -125,10 +132,14 @@ describe("mintSet", () => {
     expect(intent.action.args).toEqual([ME, ME, 100n * USDC]);
   });
 
-  it("approves the pool for exactly the collateral spent", () => {
+  it("approves the pool once while keeping the reviewed spend exact", () => {
     const intent = mintSetIntent(POOL, 100n * USDC, ME);
-    expect(intent.approval?.args).toEqual([POOL, 100n * USDC]);
+    expect(intent.approval?.args).toEqual([POOL, MAX_UINT256]);
     expect(intent.reviewed.maxCollateralIn).toBe(100n * USDC);
+  });
+
+  it("reuses an existing pool allowance", () => {
+    expect(mintSetIntent(POOL, 100n * USDC, ME, 100n * USDC).plan.calls).toHaveLength(1);
   });
 });
 
@@ -211,16 +222,16 @@ describe("position lifecycle bounds", () => {
     expect(repayIntent(1n, 50n * USDC, 0n).reviewed.maxRepayAssets).toBe(50n * USDC);
   });
 
-  it("approves the controller for exactly the repayment maximum", () => {
+  it("establishes a reusable controller allowance for repayment", () => {
     expect(repayIntent(1n, 50n * USDC, 0n).approval?.args).toEqual([
       DEPLOYMENT.controller,
-      50n * USDC,
+      MAX_UINT256,
     ]);
   });
 
-  it("adds collateral with an exact-id approval, not an operator grant", () => {
+  it("adds collateral with a reusable exact-id approval, not an operator grant", () => {
     const intent = addCollateralIntent(1n, 10n * USDC, YES_ID, 0n);
-    expect(intent.approval?.args).toEqual([DEPLOYMENT.controller, YES_ID, 10n * USDC]);
+    expect(intent.approval?.args).toEqual([DEPLOYMENT.controller, YES_ID, MAX_UINT256]);
   });
 
   it("needs no approval to withdraw collateral the controller already holds", () => {
@@ -271,11 +282,12 @@ describe("position lifecycle bounds", () => {
 });
 
 describe("vault", () => {
-  it("approves exactly the deposit", () => {
+  it("establishes a reusable vault allowance while reviewing the exact deposit", () => {
     expect(vaultDepositIntent(500n * USDC, ME, 0n).approval?.args).toEqual([
       DEPLOYMENT.vault,
-      500n * USDC,
+      MAX_UINT256,
     ]);
+    expect(vaultDepositIntent(500n * USDC, ME, 0n).reviewed.maxCollateralIn).toBe(500n * USDC);
   });
 
   it("skips approval when allowance suffices", () => {

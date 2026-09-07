@@ -3,6 +3,7 @@ import { decodeFunctionData, encodeFunctionData } from "viem";
 import { planTrade } from "./tradePlan";
 import { planAcquisition, type BookLevel } from "../domain/bookQuote";
 import { SCENARIOS } from "../fixtures/scenarios";
+import { MAX_UINT256 } from "./actions";
 
 const ONE = 1_000_000n;
 const LOT = 1_000n;
@@ -32,6 +33,7 @@ function trade(over: Partial<Parameters<typeof planTrade>[0]> = {}) {
     levels: over.levels ?? ASKS,
     owned: over.owned ?? 0n,
     collateralAllowance: over.collateralAllowance ?? 0n,
+    poolAllowance: over.poolAllowance ?? 0n,
     outcomeAllowance: over.outcomeAllowance ?? 0n,
     account: ME,
     deadlineSeconds: over.deadlineSeconds ?? 1_700_000_000n,
@@ -56,6 +58,7 @@ describe("trade planning", () => {
     expect(sequence.intents[0].action.functionName).toBe("openFromCollateral");
     expect(sequence.financedShares).toBe(500n * ONE);
     expect(sequence.missingShares).toBe(0n);
+    expect(sequence.intents[0].label).toBe("Open YES position");
   });
 
   it("mirrors the conservative direct-open debt and spend bounds", () => {
@@ -66,9 +69,10 @@ describe("trade planning", () => {
     expect(sequence.userCollateral).toBe(165_250_000n);
   });
 
-  it("approves only the bounded tUSDC contribution and encodes the new ABI", () => {
+  it("uses a reusable approval while keeping the action contribution bounded", () => {
     const open = trade().intents[0];
-    expect(open.approval?.args).toEqual([expect.anything(), 165_250_000n]);
+    expect(open.approval?.args).toEqual([expect.anything(), MAX_UINT256]);
+    expect(open.reviewed.maxCollateralIn).toBe(165_250_000n);
     const data = encodeFunctionData({
       abi: open.action.abi,
       functionName: open.action.functionName,
@@ -82,6 +86,21 @@ describe("trade planning", () => {
   it("needs one confirmation after an existing controller allowance", () => {
     expect(trade({ collateralAllowance: 200n * ONE }).confirmations).toBe(1);
     expect(trade({ collateralAllowance: 0n }).confirmations).toBe(2);
+  });
+
+  it("checks the pool allowance for spot buys, not the controller allowance", () => {
+    expect(
+      trade({
+        leverageBps: 10_000n,
+        quantity: 100n * ONE,
+        collateralAllowance: MAX_UINT256,
+        poolAllowance: 0n,
+      }).confirmations,
+    ).toBe(2);
+    expect(
+      trade({ leverageBps: 10_000n, quantity: 100n * ONE, poolAllowance: MAX_UINT256 })
+        .confirmations,
+    ).toBe(1);
   });
 
   it("uses the exact NO id, side index, and YES-denominated limit", () => {

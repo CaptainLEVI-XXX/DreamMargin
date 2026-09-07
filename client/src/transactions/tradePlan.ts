@@ -2,7 +2,12 @@ import { erc20Abi, type Address } from "viem";
 import { formatUnits, mulDivDown, mulDivUp } from "../domain/amounts";
 import { quoteBuy, type AcquisitionPlan, type BookLevel } from "../domain/bookQuote";
 import type { MarketView } from "../domain/models";
-import { buyOutcomeIntent, mintSetIntent, type Intent as ActionIntent } from "./actions";
+import {
+  buyOutcomeIntent,
+  MAX_UINT256,
+  mintSetIntent,
+  type Intent as ActionIntent,
+} from "./actions";
 import { buildCallPlan } from "./callPlan";
 import { DEPLOYMENT } from "../config/deployment";
 import { controllerAbi } from "../web3/abis/controllerAbi";
@@ -29,7 +34,10 @@ export type TradeInput = {
   /** Selected-side levels, best first, used only for the financed controller buy. */
   levels: readonly BookLevel[];
   owned: bigint;
+  /** Allowance granted to the controller for leveraged opens. */
   collateralAllowance: bigint;
+  /** Allowance granted to this market's pool for 1x purchases. */
+  poolAllowance: bigint;
   outcomeAllowance: bigint;
   account: Address;
   deadlineSeconds: bigint;
@@ -191,13 +199,20 @@ export function planTrade(input: TradeInput): TradeSequence {
         tickSize: input.tickSize,
         lotSize: input.lotSize,
         deadlineSeconds: input.deadlineSeconds,
-        collateralAllowance: input.collateralAllowance,
+        collateralAllowance: input.poolAllowance,
       }),
     );
   }
 
   if (!leveraged && acquisition.fromMint > 0n) {
-    intents.push(mintSetIntent(market.key.pool as Address, acquisition.fromMint, input.account));
+    intents.push(
+      mintSetIntent(
+        market.key.pool as Address,
+        acquisition.fromMint,
+        input.account,
+        input.poolAllowance,
+      ),
+    );
   }
 
   if (!leveraged) {
@@ -233,7 +248,7 @@ export function planTrade(input: TradeInput): TradeSequence {
   }
 
   intents.push({
-    label: `Open ${Number(input.leverageBps) / 10_000}x position`,
+    label: `Open ${input.side.toUpperCase()} position`,
     plan: buildCallPlan({
       action: { to: DEPLOYMENT.controller as Address, label: "Open leveraged position" },
       erc20: {
@@ -241,7 +256,8 @@ export function planTrade(input: TradeInput): TradeSequence {
         spender: DEPLOYMENT.controller as Address,
         required: financing.userCollateral,
         current: input.collateralAllowance,
-        label: `Approve up to ${formatUnits(financing.userCollateral, market.collateralDecimals, 2)} tUSDC`,
+        approvalAmount: MAX_UINT256,
+        label: "Enable tUSDC for DreamMargin",
       },
     }),
     reviewed: {
@@ -272,7 +288,7 @@ export function planTrade(input: TradeInput): TradeSequence {
       address: DEPLOYMENT.collateral as Address,
       abi: erc20Abi,
       functionName: "approve",
-      args: [DEPLOYMENT.controller, financing.userCollateral],
+      args: [DEPLOYMENT.controller, MAX_UINT256],
     },
   });
 

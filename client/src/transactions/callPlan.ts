@@ -7,7 +7,9 @@ import type { Address } from "viem";
  * Where the wallet can execute an atomic batch, approval and action are one
  * decoded bundle; otherwise the orchestrator sequences them and reports each
  * transaction's progress inline. §17.2: fewer prompts come from reusing existing
- * allowances and batching, never from defaulting to unlimited approvals.
+ * allowances and batching. The Shannon demo may deliberately establish a
+ * reusable allowance while still comparing the live allowance with the exact
+ * amount required by each action.
  */
 
 export type CallKind = "approve-erc20" | "approve-erc6909" | "action";
@@ -17,7 +19,7 @@ export type PlannedCall = {
   /** Short label shown in transaction progress. */
   label: string;
   to: Address;
-  /** Exact amount authorised, for an approval. */
+  /** Amount authorised by an approval. */
   amount?: bigint;
   /** Exact outcome id authorised, for an ERC-6909 approval. */
   outcomeId?: bigint;
@@ -35,6 +37,8 @@ export type Erc20AllowanceNeed = {
   required: bigint;
   current: bigint;
   label: string;
+  /** Amount encoded in the approval; defaults to the immediate requirement. */
+  approvalAmount?: bigint;
 };
 
 export type Erc6909AllowanceNeed = {
@@ -44,6 +48,8 @@ export type Erc6909AllowanceNeed = {
   required: bigint;
   current: bigint;
   label: string;
+  /** Amount encoded for this exact outcome id. */
+  approvalAmount?: bigint;
 };
 
 export type PlanInput = {
@@ -67,8 +73,7 @@ export function buildCallPlan(input: PlanInput): CallPlan {
       kind: "approve-erc20",
       label: input.erc20.label,
       to: input.erc20.token,
-      // Exact amount, never unlimited. §17.2
-      amount: input.erc20.required,
+      amount: input.erc20.approvalAmount ?? input.erc20.required,
     });
   }
 
@@ -77,7 +82,7 @@ export function buildCallPlan(input: PlanInput): CallPlan {
       kind: "approve-erc6909",
       label: input.erc6909.label,
       to: input.erc6909.token,
-      amount: input.erc6909.required,
+      amount: input.erc6909.approvalAmount ?? input.erc6909.required,
       outcomeId: input.erc6909.outcomeId,
     });
   }
