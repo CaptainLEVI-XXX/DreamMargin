@@ -1,6 +1,6 @@
 .dm-tiers {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
   gap: var(--dm-space);
   padding: 5px;
   border: 1px solid #2c2b27;

@@ -20,6 +20,50 @@ export type DeleveragePlan =
     }
   | { ready: false; reason: string };
 
+export type FullClosePlan =
+  | {
+      ready: true;
+      minCollateralOut: bigint;
+      maxRepayAssets: bigint;
+      limitPrice: bigint;
+      estimatedOwnerAssets: bigint;
+    }
+  | { ready: false; reason: string };
+
+/** Quote a fill-or-kill sale of every position share into tUSDC. */
+export function planFullCloseToCollateral(position: PositionView): FullClosePlan {
+  const { market } = position;
+  const levels = position.outcomeIndex === 0 ? market.book?.yesBids : market.book?.noBids;
+  if (levels === undefined || levels.length === 0) {
+    return { ready: false, reason: "No exit liquidity is available for this outcome" };
+  }
+
+  let remaining = position.shares;
+  let proceeds = 0n;
+  let worstSidePrice = 0n;
+  for (const level of levels) {
+    if (remaining === 0n) break;
+    const take = level.quantity < remaining ? level.quantity : remaining;
+    if (take === 0n) continue;
+    proceeds += mulDivDown(take, level.price, market.oneCollateral);
+    remaining -= take;
+    worstSidePrice = level.price;
+  }
+  if (remaining !== 0n || worstSidePrice === 0n) {
+    return { ready: false, reason: "The order book cannot sell the entire position" };
+  }
+
+  const bufferedDebt = repaymentLimit(position.debtAssets);
+  return {
+    ready: true,
+    minCollateralOut: proceeds,
+    maxRepayAssets: bufferedDebt > proceeds ? bufferedDebt - proceeds : 0n,
+    limitPrice:
+      position.outcomeIndex === 0 ? worstSidePrice : market.oneCollateral - worstSidePrice,
+    estimatedOwnerAssets: proceeds > position.debtAssets ? proceeds - position.debtAssets : 0n,
+  };
+}
+
 /**
  * Sell enough book-backed shares to clear the current debt plus its movement
  * buffer. Clearing debt avoids the protocol's forbidden sub-minimum remainder.

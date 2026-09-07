@@ -12,9 +12,9 @@ import { buildCallPlan, type CallPlan } from "./callPlan";
  * Every economic intent the client can start, expressed as a call plan plus the
  * bounds the user reviewed.
  *
- * One place for all of them so approval scope, exactness, and the reviewed set
- * are decided uniformly rather than per screen. §17.2: approvals are always the
- * exact amount and, for outcomes, the exact id.
+ * One place for all of them so approval scope and the reviewed set are decided
+ * uniformly rather than per screen. This Shannon demo uses reusable maximum
+ * allowances after checking that the current allowance is insufficient.
  */
 
 export const testUsdcAbi = parseAbi(["function faucet(uint256 amount)"]);
@@ -26,6 +26,7 @@ export const binaryPoolAbi = parseAbi([
 
 /** tUSDC and outcome shares both use six decimals on this deployment. */
 const DECIMALS = 6;
+export const MAX_UINT256 = (1n << 256n) - 1n;
 
 /** Format an amount for a label. Integer division would silently truncate. */
 function amt(value: bigint): string {
@@ -59,13 +60,29 @@ export type Intent = {
   approval?: Action;
 };
 
-/** Mint test collateral. Testnet only, and it needs no approval. */
-export function faucetIntent(amount: bigint): Intent {
+/** Mint test collateral and establish the reusable controller allowance. */
+export function faucetIntent(amount: bigint, controllerAllowance = 0n): Intent {
   return {
     label: `Mint ${amt(amount)} tUSDC`,
-    plan: buildCallPlan({ action: { to: collateral, label: `Mint tUSDC` } }),
+    plan: buildCallPlan({
+      action: { to: collateral, label: `Mint tUSDC` },
+      erc20: {
+        token: collateral,
+        spender: controller,
+        required: MAX_UINT256,
+        current: controllerAllowance,
+        approvalAmount: MAX_UINT256,
+        label: "Enable tUSDC for DreamMargin",
+      },
+    }),
     reviewed: {},
     action: { address: collateral, abi: testUsdcAbi, functionName: "faucet", args: [amount] },
+    approval: {
+      address: collateral,
+      abi: erc20Abi,
+      functionName: "approve",
+      args: [controller, MAX_UINT256],
+    },
   };
 }
 
@@ -92,7 +109,12 @@ export function observeIntent(generationKey: `0x${string}`): Intent {
  * only a handful of shares — so it is the reliable way to obtain the outcome
  * shares a leveraged position is opened against.
  */
-export function mintSetIntent(pool: Address, amount: bigint, to: Address): Intent {
+export function mintSetIntent(
+  pool: Address,
+  amount: bigint,
+  to: Address,
+  poolAllowance = 0n,
+): Intent {
   return {
     label: `Mint ${amt(amount)} complete sets`,
     plan: buildCallPlan({
@@ -101,8 +123,9 @@ export function mintSetIntent(pool: Address, amount: bigint, to: Address): Inten
         token: collateral,
         spender: pool,
         required: amount,
-        current: 0n,
-        label: `Approve ${amt(amount)} tUSDC`,
+        current: poolAllowance,
+        approvalAmount: MAX_UINT256,
+        label: "Enable tUSDC for this market",
       },
     }),
     reviewed: { maxCollateralIn: amount },
@@ -116,7 +139,7 @@ export function mintSetIntent(pool: Address, amount: bigint, to: Address): Inten
       address: collateral,
       abi: erc20Abi,
       functionName: "approve",
-      args: [pool, amount],
+      args: [pool, MAX_UINT256],
     },
   };
 }
@@ -159,7 +182,8 @@ export function buyOutcomeIntent(input: {
         spender: input.pool,
         required: maxCollateralIn,
         current: input.collateralAllowance,
-        label: `Approve ${amt(maxCollateralIn)} tUSDC`,
+        approvalAmount: MAX_UINT256,
+        label: "Enable tUSDC for this market",
       },
     }),
     reviewed: { side: "buy", maxCollateralIn, limitPrice: yesLimit },
@@ -183,7 +207,7 @@ export function buyOutcomeIntent(input: {
       address: collateral,
       abi: erc20Abi,
       functionName: "approve",
-      args: [input.pool, maxCollateralIn],
+      args: [input.pool, MAX_UINT256],
     },
   };
 }
@@ -199,7 +223,8 @@ export function vaultDepositIntent(assets: bigint, receiver: Address, allowance:
         spender: vault,
         required: assets,
         current: allowance,
-        label: `Approve ${amt(assets)} tUSDC`,
+        approvalAmount: MAX_UINT256,
+        label: "Enable tUSDC for the vault",
       },
     }),
     reviewed: { maxCollateralIn: assets },
@@ -214,7 +239,7 @@ export function vaultDepositIntent(assets: bigint, receiver: Address, allowance:
       address: collateral,
       abi: erc20Abi,
       functionName: "approve",
-      args: [vault, assets],
+      args: [vault, MAX_UINT256],
     },
   };
 }
@@ -248,7 +273,8 @@ export function repayIntent(positionId: bigint, maxAssets: bigint, allowance: bi
         spender: controller,
         required: maxAssets,
         current: allowance,
-        label: `Approve ${amt(maxAssets)} tUSDC`,
+        approvalAmount: MAX_UINT256,
+        label: "Enable tUSDC for DreamMargin",
       },
     }),
     reviewed: { maxRepayAssets: maxAssets },
@@ -263,7 +289,7 @@ export function repayIntent(positionId: bigint, maxAssets: bigint, allowance: bi
       address: collateral,
       abi: erc20Abi,
       functionName: "approve",
-      args: [controller, maxAssets],
+      args: [controller, MAX_UINT256],
     },
   };
 }
@@ -285,7 +311,8 @@ export function addCollateralIntent(
         outcomeId,
         required: shares,
         current: allowance,
-        label: `Approve ${amt(shares)} shares only`,
+        approvalAmount: MAX_UINT256,
+        label: "Enable this outcome for DreamMargin",
       },
     }),
     reviewed: {},
@@ -300,7 +327,7 @@ export function addCollateralIntent(
       address: outcomeToken,
       abi: erc6909Abi as readonly unknown[],
       functionName: "approve",
-      args: [controller, outcomeId, shares],
+      args: [controller, outcomeId, MAX_UINT256],
     },
   };
 }
@@ -378,7 +405,8 @@ export function closeToOutcomeIntent(
         spender: controller,
         required: maxRepayAssets,
         current: allowance,
-        label: `Approve ${amt(maxRepayAssets)} tUSDC`,
+        approvalAmount: MAX_UINT256,
+        label: "Enable tUSDC for DreamMargin",
       },
     }),
     reviewed: { maxRepayAssets },
@@ -403,7 +431,7 @@ export function closeToOutcomeIntent(
       address: collateral,
       abi: erc20Abi,
       functionName: "approve",
-      args: [controller, maxRepayAssets],
+      args: [controller, MAX_UINT256],
     },
   };
 }
@@ -426,7 +454,8 @@ export function closeToCollateralIntent(input: {
         spender: controller,
         required: input.maxRepayAssets,
         current: input.allowance,
-        label: `Approve ${amt(input.maxRepayAssets)} tUSDC`,
+        approvalAmount: MAX_UINT256,
+        label: "Enable tUSDC for DreamMargin",
       },
     }),
     reviewed: {
@@ -456,7 +485,7 @@ export function closeToCollateralIntent(input: {
       address: collateral,
       abi: erc20Abi,
       functionName: "approve",
-      args: [controller, input.maxRepayAssets],
+      args: [controller, MAX_UINT256],
     },
   };
 }

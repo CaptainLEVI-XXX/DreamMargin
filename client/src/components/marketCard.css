@@ -245,6 +245,12 @@
   font-size: var(--dm-size-13);
 }
 
+.dm-market-sell {
+  color: var(--dm-muted);
+  font-family: var(--dm-font-mono);
+  font-size: 10px;
+}
+
 .dm-market-closes {
   margin-left: auto;
   min-width: 138px;

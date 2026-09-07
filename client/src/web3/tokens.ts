@@ -15,6 +15,8 @@ export type Balances = {
   collateral: bigint;
   /** Allowance from the wallet to the controller, for repay and close. */
   collateralAllowance: bigint;
+  /** Allowance from the wallet to the selected DreamDEX pool, for spot buys. */
+  poolAllowance: bigint;
   /** Allowance from the wallet to the ERC-4626 vault, for deposits. */
   vaultAllowance: bigint;
   /** Vault shares held. */
@@ -29,6 +31,7 @@ export type Balances = {
 export const EMPTY_BALANCES: Balances = {
   collateral: 0n,
   collateralAllowance: 0n,
+  poolAllowance: 0n,
   vaultAllowance: 0n,
   vaultShares: 0n,
   yes: 0n,
@@ -48,6 +51,7 @@ export async function readBalances(
   owner: Address,
   yesId: bigint,
   noId: bigint,
+  pool: Address,
 ): Promise<Balances> {
   const collateralToken = DEPLOYMENT.collateral as Address;
   const outcomeToken = DEPLOYMENT.outcomeToken as Address;
@@ -57,6 +61,7 @@ export async function readBalances(
   const [
     collateral,
     collateralAllowance,
+    poolAllowance,
     vaultAllowance,
     vaultShares,
     yes,
@@ -75,6 +80,12 @@ export async function readBalances(
       abi: erc20Abi,
       functionName: "allowance",
       args: [owner, controller],
+    }),
+    client.readContract({
+      address: collateralToken,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [owner, pool],
     }),
     client.readContract({
       address: collateralToken,
@@ -117,6 +128,7 @@ export async function readBalances(
   return {
     collateral,
     collateralAllowance,
+    poolAllowance,
     vaultAllowance,
     vaultShares,
     yes,

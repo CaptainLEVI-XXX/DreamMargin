@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { Countdown } from "../components/Countdown";
-import { LeverageTiers } from "../components/LeverageTiers";
+import { LeverageTiers, type LeverageOption } from "../components/LeverageTiers";
 import { MarketChart } from "../components/MarketChart";
 import { SafetyBuffer } from "../components/SafetyBuffer";
 import { TransactionProgress } from "../components/TransactionProgress";
@@ -10,9 +10,10 @@ import { Value } from "../components/Value";
 import { useIndexSeries } from "../data/useIndexSeries";
 import type { Resolution } from "../data/priceFeed";
 import { formatCents, formatUnits, parseUnitsStrict } from "../domain/amounts";
-import { planAcquisition, type BookLevel } from "../domain/bookQuote";
-import { defaultTier, formatMultiple, tiersFor } from "../domain/leverageTiers";
+import { planAcquisition, quoteSell, type BookLevel } from "../domain/bookQuote";
+import { formatMultiple } from "../domain/leverageTiers";
 import type { MarketView, ProtocolView, VaultView } from "../domain/models";
+import { quotePayFirst } from "../domain/payFirstQuote";
 import { availabilityFor, PositionStatus } from "../domain/protocol";
 import type { WalletCapabilities } from "../transactions/callPlan";
 import { planTrade } from "../transactions/tradePlan";
@@ -21,6 +22,9 @@ import { DEPLOYMENT } from "../config/deployment";
 import type { Balances } from "../web3/tokens";
 
 const BPS = 10_000n;
+const PREVIEW_ACCOUNT = "0x0000000000000000000000000000000000000001" as const;
+const MAX_LEVERAGE_CHOICE = "max";
+const CLEAN_LEVERAGE_TARGETS = [10_000n, 12_500n, 15_000n, 17_500n] as const;
 type ChartRange = "4h" | "10d" | "all";
 const CHART_RANGES: Record<ChartRange, { label: string; resolution: Resolution; limit: number }> = {
   "4h": { label: "4H", resolution: "M1", limit: 240 },
@@ -49,10 +53,9 @@ type Props = {
 /**
  * The market page: chart on the left, one action panel on the right.
  *
- * The tier row chooses the economic action. At 1x the entered size is a normal
- * outcome purchase. Above 1x the entered size is the exact final position:
- * DreamMargin combines trader tUSDC with vault debt and buys the outcome in one
- * controller action.
+ * The trader enters a wallet budget and chooses cash-on-cash leverage. The
+ * client solves the corresponding shares and conservative contract risk value;
+ * those implementation parameters never become part of the primary interface.
  */
 export function TradeView({
   market,
@@ -67,33 +70,71 @@ export function TradeView({
   onSupplyVault,
 }: Props) {
   const d = market.collateralDecimals;
-  const tiers = tiersFor(market.maxLeverageBps);
   const [side, setSide] = useState<"yes" | "no">("yes");
-  const [leverageBps, setLeverageBps] = useState<bigint>(defaultTier(tiers));
-  const [amountText, setAmountText] = useState("5");
+  const [leverageChoice, setLeverageChoice] = useState("12500");
+  const [amountText, setAmountText] = useState("50");
   const [chartRange, setChartRange] = useState<ChartRange>("10d");
   const chart = CHART_RANGES[chartRange];
   const index = useIndexSeries(market.asset, market.tradingStart, chart.resolution, chart.limit);
   const { intent, run, reset } = useIntentRunner(account, capabilities, onSettled);
 
-  let amount: bigint | null = null;
+  let walletBudget: bigint | null = null;
   try {
-    amount = amountText.trim() === "" ? null : parseUnitsStrict(amountText, d);
+    walletBudget = amountText.trim() === "" ? null : parseUnitsStrict(amountText, d);
   } catch {
-    amount = null;
+    walletBudget = null;
   }
 
   const owned = side === "yes" ? balances.yes : balances.no;
-  const quantity = amount ?? 0n;
-  const leveraged = leverageBps > BPS;
   const selectedLevels = side === "yes" ? book.asks : book.bids;
+  const selectedRiskMark = side === "yes" ? market.riskMark : market.noRiskMark;
+  const quoteFor = (targetLeverageBps?: bigint) =>
+    quotePayFirst({
+      side,
+      levels: selectedLevels,
+      walletBudget: walletBudget ?? 0n,
+      targetLeverageBps,
+      maxRiskLeverageBps: market.maxLeverageBps,
+      riskMark: selectedRiskMark,
+      oneCollateral: market.oneCollateral,
+      lotSize: 1_000n,
+      maximumShares: DEPLOYMENT.maximumPositionShares,
+      authorizationBufferBps: market.oracleStale ? 1_000n : 100n,
+    });
+  const maximumQuote = quoteFor();
+  const leverageOptions: LeverageOption[] = [{ id: String(BPS), label: "1x" }];
+  for (const target of CLEAN_LEVERAGE_TARGETS.slice(1)) {
+    if (target > maximumQuote.effectiveLeverageBps) continue;
+    const quote = quoteFor(target);
+    if (quote.blocked === undefined) {
+      leverageOptions.push({ id: String(target), label: formatMultiple(target) });
+    }
+  }
+  const highestClean = leverageOptions.at(-1);
+  const highestCleanBps = highestClean === undefined ? BPS : BigInt(highestClean.id);
+  if (
+    maximumQuote.blocked === undefined &&
+    maximumQuote.effectiveLeverageBps > highestCleanBps + 50n
+  ) {
+    leverageOptions.push({
+      id: MAX_LEVERAGE_CHOICE,
+      label: `Max ${formatMultiple(maximumQuote.effectiveLeverageBps)}`,
+    });
+  }
+  const activeChoice = leverageOptions.some((option) => option.id === leverageChoice)
+    ? leverageChoice
+    : (leverageOptions.at(-1)?.id ?? String(BPS));
+  const payQuote =
+    activeChoice === MAX_LEVERAGE_CHOICE ? maximumQuote : quoteFor(BigInt(activeChoice));
+  const quantity = payQuote.shares;
+  const leveraged = payQuote.riskLeverageBps > BPS;
   const acquisition = planAcquisition({
     side,
     levels: selectedLevels,
-    quantity: leveraged ? 0n : quantity,
+    quantity,
     oneCollateral: market.oneCollateral,
     lotSize: 1_000n,
-    allowMint: true,
+    allowMint: false,
   });
 
   /**
@@ -102,27 +143,28 @@ export function TradeView({
    * acts, and §12 requires a quote whose deadline is still ahead of the
    * transaction.
    */
-  const buildSequence = (deadlineSeconds: bigint) =>
-    account === null || amount === null
+  const planSequence = (deadlineSeconds: bigint) =>
+    walletBudget === null || payQuote.blocked !== undefined
       ? null
       : planTrade({
           market,
           side,
           quantity,
-          leverageBps,
+          leverageBps: payQuote.riskLeverageBps,
           acquisition,
           levels: selectedLevels,
           owned,
           collateralAllowance: balances.collateralAllowance,
+          poolAllowance: balances.poolAllowance,
           outcomeAllowance: side === "yes" ? balances.yesAllowance : balances.noAllowance,
-          account,
+          account: account ?? PREVIEW_ACCOUNT,
           deadlineSeconds,
           lotSize: 1_000n,
           tickSize: 1_000n,
         });
 
   // Preview values do not depend on the deadline, so a placeholder keeps render pure.
-  const sequence = buildSequence(0n);
+  const sequence = planSequence(0n);
 
   const availability = availabilityFor({
     mode: protocol.mode,
@@ -136,35 +178,58 @@ export function TradeView({
   const borrowed = sequence?.borrowed ?? 0n;
   const financedShares = sequence?.financedShares ?? 0n;
   const expectedExposure = leveraged ? financedShares : 0n;
-  const selectedRiskMark = side === "yes" ? market.riskMark : market.noRiskMark;
+  const totalCost = payQuote.entryCost;
+  const acquired = acquisition.fromBook + acquisition.fromMint;
+  const walletPayment = payQuote.walletPayment;
+  const receivedShares = leveraged ? expectedExposure : acquired;
+  const estimatedLeverageBps = payQuote.effectiveLeverageBps;
+  const estimatedDebt = totalCost > walletPayment ? totalCost - walletPayment : 0n;
+  const exitQuote = quoteSell({
+    side,
+    levels: side === "yes" ? book.bids : book.asks,
+    quantity: receivedShares,
+    oneCollateral: market.oneCollateral,
+    lotSize: 1_000n,
+  });
+  const exitIsFillable = receivedShares > 0n && exitQuote.fillable === receivedShares;
+  const estimatedCloseReturn =
+    exitIsFillable && exitQuote.proceeds > estimatedDebt ? exitQuote.proceeds - estimatedDebt : 0n;
+  const spreadImpact =
+    exitIsFillable && totalCost > exitQuote.proceeds ? totalCost - exitQuote.proceeds : 0n;
+  const yesBuyPrice = book.asks[0]?.yesPrice;
+  const yesSellPrice = book.bids[0]?.yesPrice;
+  const noBuyPrice = yesSellPrice === undefined ? undefined : market.oneCollateral - yesSellPrice;
+  const noSellPrice = yesBuyPrice === undefined ? undefined : market.oneCollateral - yesBuyPrice;
+  const priceText = (price: bigint | undefined) =>
+    price === undefined ? "Unavailable" : formatCents(price, market.oneCollateral);
   const maintenanceLtvBps = market.maintenanceLtvBps ?? 6_000n;
   const expectedRiskValue = (expectedExposure * selectedRiskMark) / market.oneCollateral;
   const expectedDebtCapacity = (expectedRiskValue * maintenanceLtvBps) / BPS;
   const expectedBufferBps =
-    expectedDebtCapacity === 0n || borrowed >= expectedDebtCapacity
+    expectedDebtCapacity === 0n || estimatedDebt >= expectedDebtCapacity
       ? 0n
-      : ((expectedDebtCapacity - borrowed) * BPS) / expectedDebtCapacity;
+      : ((expectedDebtCapacity - estimatedDebt) * BPS) / expectedDebtCapacity;
   const expectedLiquidationPrice =
     expectedExposure === 0n || maintenanceLtvBps === 0n
       ? 0n
-      : (borrowed * market.oneCollateral * BPS) / (expectedExposure * maintenanceLtvBps);
+      : (estimatedDebt * market.oneCollateral * BPS) / (expectedExposure * maintenanceLtvBps);
   // Borrowing draws on vault cash; without it the open reverts however many
   // shares are held, so it is surfaced here rather than at signing time.
   const vaultShort = leveraged && borrowed > vault.availableLiquidity;
-  const totalCost = leveraged
-    ? (sequence?.maximumCost ?? 0n)
-    : acquisition.bookCost + acquisition.mintCost;
-  const acquired = acquisition.fromBook + acquisition.fromMint;
-  const effectivePrice = acquired === 0n ? null : (totalCost * market.oneCollateral) / acquired;
-
-  const blockedReason = !leveraged
-    ? undefined
-    : vaultShort
-      ? "The vault has no cash to lend"
-      : availability.openBlockedReason;
+  const blockedReason =
+    payQuote.blocked ??
+    (leveraged
+      ? vaultShort
+        ? "The vault has no cash to lend"
+        : availability.openBlockedReason
+      : undefined);
 
   const canAct =
-    account !== null && amount !== null && sequence !== null && sequence.blocked === undefined;
+    account !== null &&
+    walletBudget !== null &&
+    payQuote.blocked === undefined &&
+    sequence !== null &&
+    sequence.blocked === undefined;
 
   return (
     <div className="dm-trade">
@@ -206,7 +271,7 @@ export function TradeView({
         )}
 
         <dl className="dm-market-facts">
-          <dt>Market price</dt>
+          <dt>Market midpoint</dt>
           <dd>
             {market.priceKnown === false ? (
               <span className="dm-unknown">No trades yet</span>
@@ -244,7 +309,15 @@ export function TradeView({
             aria-pressed={side === "yes"}
             onClick={() => setSide("yes")}
           >
-            YES <Value>{formatCents(market.yesPrice, market.oneCollateral)}</Value>
+            <span>YES</span>
+            <span className="dm-side-quotes">
+              <span>
+                Buy <Value>{priceText(yesBuyPrice)}</Value>
+              </span>
+              <span>
+                Sell <Value>{priceText(yesSellPrice)}</Value>
+              </span>
+            </span>
           </button>
           <button
             type="button"
@@ -253,96 +326,112 @@ export function TradeView({
             aria-pressed={side === "no"}
             onClick={() => setSide("no")}
           >
-            NO{" "}
-            <Value>
-              {formatCents(market.oneCollateral - market.yesPrice, market.oneCollateral)}
-            </Value>
+            <span>NO</span>
+            <span className="dm-side-quotes">
+              <span>
+                Buy <Value>{priceText(noBuyPrice)}</Value>
+              </span>
+              <span>
+                Sell <Value>{priceText(noSellPrice)}</Value>
+              </span>
+            </span>
           </button>
         </div>
 
         <label className="dm-field">
-          {leveraged ? "Position size in shares" : "Shares to buy"}
-          <input
-            aria-label="Shares"
-            value={amountText}
-            inputMode="decimal"
-            onChange={(e) => setAmountText(e.target.value)}
-          />
+          Maximum spend
+          <span className="dm-amount-input">
+            <input
+              aria-label="tUSDC amount"
+              value={amountText}
+              inputMode="decimal"
+              onChange={(e) => setAmountText(e.target.value)}
+            />
+            <span>tUSDC</span>
+          </span>
         </label>
 
-        <div className="dm-chart-range dm-share-presets" role="group" aria-label="Share presets">
-          {[100, 500, 1000].map((preset) => (
+        <div className="dm-chart-range dm-share-presets" role="group" aria-label="tUSDC presets">
+          {[10, 50, 100].map((preset) => (
             <button key={preset} type="button" onClick={() => setAmountText(String(preset))}>
               {preset}
             </button>
           ))}
           <button
             type="button"
-            onClick={() => setAmountText(formatUnits(DEPLOYMENT.maximumPositionShares, d, 0))}
+            onClick={() => setAmountText(formatUnits(balances.collateral, d, 2))}
           >
             Max
           </button>
         </div>
 
         <LeverageTiers
-          maxLeverageBps={market.maxLeverageBps}
-          selected={leverageBps}
-          onSelect={setLeverageBps}
+          options={leverageOptions}
+          selected={activeChoice}
+          onSelect={setLeverageChoice}
         />
         <p className="dm-step-note">
           {leveraged
-            ? `Pay with tUSDC; DreamMargin adds vault credit and buys the ${side.toUpperCase()} shares in one transaction.`
-            : `A normal DreamDEX purchase with no borrowing.`}
+            ? `Choose the position size you want without calculating the borrowing behind it.`
+            : `Buy directly from the DreamDEX order book without borrowing.`}
         </p>
 
         <dl className="dm-market-facts dm-trade-summary">
-          {leveraged ? (
-            <>
-              <dt>Expected from wallet</dt>
-              <dd>
-                ≈ <Value>{formatUnits(sequence?.estimatedUserCollateral ?? 0n, d)} tUSDC</Value>
-              </dd>
-              <dt>Authorized maximum</dt>
-              <dd>
-                <Value>{formatUnits(sequence?.userCollateral ?? 0n, d)} tUSDC</Value>
-              </dd>
-              <dt>Vault credit</dt>
-              <dd>
-                ≈ <Value>{formatUnits(borrowed, d)} tUSDC</Value>
-              </dd>
-              <dt>Worst-case purchase cost</dt>
-              <dd>
-                <Value>{formatUnits(totalCost, d)} tUSDC</Value>
-              </dd>
-              <dt>Position exposure</dt>
-              <dd>
-                <Value>{formatUnits(expectedExposure, d)}</Value> {side.toUpperCase()}
-              </dd>
-            </>
-          ) : (
-            <>
-              <dt>Cost</dt>
-              <dd>
-                <Value>{formatUnits(totalCost, d)} tUSDC</Value>
-              </dd>
-              <dt>Shares bought</dt>
-              <dd>
-                <Value>{formatUnits(acquired, d)}</Value> {side.toUpperCase()}
-              </dd>
-              <dt>Average price</dt>
-              <dd>
-                {/* The effective price differs whenever minting is involved:
-                    a complete set costs one whole unit and also returns the
-                    opposite outcome. */}
-                {effectivePrice === null ? (
-                  <span className="dm-unknown">—</span>
-                ) : (
-                  <Value>{formatCents(effectivePrice, market.oneCollateral)}</Value>
-                )}
-              </dd>
-            </>
-          )}
+          <dt>You pay</dt>
+          <dd>
+            <Value>{formatUnits(walletPayment, d, 2)} tUSDC</Value>
+          </dd>
+          <dt>You receive</dt>
+          <dd>
+            <Value>{formatUnits(receivedShares, d, 2)}</Value> {side.toUpperCase()}
+          </dd>
+          <dt>Position exposure</dt>
+          <dd>
+            <Value>{formatUnits(totalCost, d, 2)} tUSDC</Value>
+          </dd>
+          <dt>{leveraged ? "If closed now" : "If sold now"}</dt>
+          <dd>
+            {exitIsFillable ? (
+              <Value>{formatUnits(estimatedCloseReturn, d, 2)} tUSDC</Value>
+            ) : (
+              <span className="dm-unknown">Not enough exit liquidity</span>
+            )}
+          </dd>
+          <dt>Maximum payout</dt>
+          <dd>
+            <Value>{formatUnits(receivedShares, d, 2)} tUSDC</Value>
+          </dd>
+          <dt>Estimated leverage</dt>
+          <dd>
+            <Value>{formatMultiple(estimatedLeverageBps)}</Value>
+          </dd>
         </dl>
+
+        <details className="dm-order-details">
+          <summary>Order details</summary>
+          <dl className="dm-market-facts">
+            {leveraged ? (
+              <>
+                <dt>Estimated debt</dt>
+                <dd>
+                  <Value>{formatUnits(estimatedDebt, d, 2)} tUSDC</Value>
+                </dd>
+                <dt>Maximum wallet spend</dt>
+                <dd>
+                  <Value>{formatUnits(payQuote.maximumWalletSpend, d, 2)} tUSDC</Value>
+                </dd>
+                <dt>Current spread impact</dt>
+                <dd>
+                  {exitIsFillable ? (
+                    <Value>{formatUnits(spreadImpact, d, 2)} tUSDC</Value>
+                  ) : (
+                    <span className="dm-unknown">Unavailable</span>
+                  )}
+                </dd>
+              </>
+            ) : null}
+          </dl>
+        </details>
 
         {acquisition.note === undefined ? null : (
           <p className="dm-trade-note">{acquisition.note}</p>
@@ -371,14 +460,15 @@ export function TradeView({
         {intent === null ? (
           <Button
             variant="primary"
-            disabled={!canAct || (leveraged && blockedReason !== undefined)}
+            disabled={!canAct || blockedReason !== undefined}
             disabledReason={
               account === null
                 ? "Connect a wallet to continue"
                 : (blockedReason ?? sequence?.blocked)
             }
             onClick={() => {
-              const fresh = buildSequence(nextTradeDeadline());
+              if (account === null) return;
+              const fresh = planSequence(nextTradeDeadline());
               if (fresh === null) return;
               // Sequential by necessity: a DreamDEX fill must confirm before
               // DreamMargin can pull the shares.
@@ -390,9 +480,7 @@ export function TradeView({
               })();
             }}
           >
-            {leveraged
-              ? `Open ${formatMultiple(leverageBps)} position`
-              : `Buy ${amountText} ${side.toUpperCase()}`}
+            {leveraged ? `Open ${side.toUpperCase()} position` : `Buy ${side.toUpperCase()}`}
           </Button>
         ) : (
           <TransactionProgress intent={intent} onReview={reset} onRetry={reset} />

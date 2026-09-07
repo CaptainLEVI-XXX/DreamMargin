@@ -162,11 +162,11 @@ const TABLE: Record<string, { message: string; recovery: string }> = {
   },
   InsufficientOutcomeAllowance: {
     message: "The approved outcome amount is not enough for this action",
-    recovery: "Approve the exact amount shown",
+    recovery: "Try again to refresh the outcome approval",
   },
   InsufficientShareAllowance: {
     message: "The approved vault-share amount is not enough for this action",
-    recovery: "Approve the exact amount shown",
+    recovery: "Try again to refresh the vault approval",
   },
   InsufficientPositionShares: {
     message: "The position holds fewer shares than requested",

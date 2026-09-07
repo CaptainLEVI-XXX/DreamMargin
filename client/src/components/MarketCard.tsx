@@ -25,6 +25,12 @@ export function MarketCard({ market, points, chartState, onOpen }: Props) {
   const held = market.ownedYes + market.ownedNo;
   const leveraged = market.maxLeverageBps > 10_000n;
   const rising = points.length > 1 && points[points.length - 1].close >= points[0].close;
+  const yesBuy = market.book?.yesAsks[0]?.price;
+  const yesSell = market.book?.yesBids[0]?.price;
+  const noBuy = market.book?.noAsks[0]?.price;
+  const noSell = market.book?.noBids[0]?.price;
+  const showPrice = (price: bigint | undefined) =>
+    price === undefined ? "—" : formatCents(price, market.oneCollateral);
 
   return (
     <button
@@ -39,7 +45,7 @@ export function MarketCard({ market, points, chartState, onOpen }: Props) {
           <span className="dm-market-interval">{intervalLabel(market)}</span>
         </span>
         <span className="dm-tag" data-on={leveraged ? "" : undefined}>
-          {leveraged ? `up to ${Number(market.maxLeverageBps) / 10_000}x` : "buy only"}
+          {leveraged ? "leverage available" : "buy only"}
         </span>
       </span>
 
@@ -58,12 +64,18 @@ export function MarketCard({ market, points, chartState, onOpen }: Props) {
 
       <span className="dm-market-prices">
         <span>
-          <small>YES</small>
-          <Value>{formatCents(market.yesPrice, market.oneCollateral)}</Value>
+          <small>
+            <span>YES</span> · BUY
+          </small>
+          <Value>{showPrice(yesBuy)}</Value>
+          <span className="dm-market-sell">Sell {showPrice(yesSell)}</span>
         </span>
         <span>
-          <small>NO</small>
-          <Value>{formatCents(market.oneCollateral - market.yesPrice, market.oneCollateral)}</Value>
+          <small>
+            <span>NO</span> · BUY
+          </small>
+          <Value>{showPrice(noBuy)}</Value>
+          <span className="dm-market-sell">Sell {showPrice(noSell)}</span>
         </span>
         <span className="dm-market-closes">
           <small>Closes in</small>

@@ -61,10 +61,26 @@ describe("market cards", () => {
     expect(within(btcCard).getByText("1 minute market")).toBeVisible();
     expect(within(btcCard).getByText("buy only")).toBeVisible();
     expect(within(ethCard).getByText("1 day market")).toBeVisible();
-    expect(within(ethCard).getByText(/up to 2x/i)).toBeVisible();
+    expect(within(ethCard).getByText(/leverage available/i)).toBeVisible();
     expect(within(ethCard).getByText("240 shares held")).toBeVisible();
     expect(within(ethCard).getByText("YES")).toBeVisible();
     expect(within(ethCard).getByText("NO")).toBeVisible();
+  });
+
+  it("labels executable buy and sell prices instead of presenting a midpoint as tradable", () => {
+    const priced = {
+      ...eth,
+      book: {
+        yesBids: [{ price: 495_000n, quantity: 500n * ONE }],
+        yesAsks: [{ price: 505_000n, quantity: 500n * ONE }],
+        noBids: [{ price: 495_000n, quantity: 500n * ONE }],
+        noAsks: [{ price: 505_000n, quantity: 500n * ONE }],
+      },
+    };
+    render(view([priced]));
+    const card = screen.getByRole("button", { name: /open ETH market/i });
+    expect(within(card).getAllByText("50.5¢")).toHaveLength(2);
+    expect(within(card).getAllByText("Sell 49.5¢")).toHaveLength(2);
   });
 
   it("opens the detail page by clicking anywhere on the card", async () => {

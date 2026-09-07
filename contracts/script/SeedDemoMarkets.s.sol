@@ -38,8 +38,8 @@ contract SeedDemoMarkets is Script {
   uint256 private constant _VAULT_TARGET = 50_000 * LibShannonSetup.UNIT;
   uint256 private constant _BOOK_QUANTITY = 50_000 * LibShannonSetup.UNIT;
   uint256 private constant _FAUCET_CHUNK = 10_000 * LibShannonSetup.UNIT;
-  uint256 private constant _YES_BID = 450_000;
-  uint256 private constant _YES_ASK = 550_000;
+  uint256 private constant _YES_BID = 495_000;
+  uint256 private constant _YES_ASK = 505_000;
   uint8 private constant _SELL_YES = 1;
   uint8 private constant _SELL_NO = 3;
   uint8 private constant _LIMIT_ORDER = 0;
@@ -124,7 +124,7 @@ contract SeedDemoMarkets is Script {
     LibShannonSetup.TEST_USDC.safeApproveWithRetry(vaultAddress, 0);
   }
 
-  /// @notice Tops one YES book up to durable 0.45 bid and 0.55 ask depth.
+  /// @notice Tops one YES book up to durable 0.495 bid and 0.505 ask depth.
   /// @param live Validated long-lived DreamDEX generation.
   /// @param owner Account funding the inventory and owning the resting orders.
   /// @return result Pool-scoped order identifiers, or zeros when the book was already seeded.
@@ -135,10 +135,8 @@ contract SeedDemoMarkets is Script {
     IDreamDexBinaryPool pool = IDreamDexBinaryPool(live.pool);
     IDreamDexBinaryPool.BookLevel[] memory bids = pool.getBookLevels(true, 1);
     IDreamDexBinaryPool.BookLevel[] memory asks = pool.getBookLevels(false, 1);
-    uint256 bidDepth = bids.length == 0 ? 0 : bids[0].quantity;
-    uint256 askDepth = asks.length == 0 ? 0 : asks[0].quantity;
-    if (bids.length != 0) require(bids[0].price == _YES_BID, "UNEXPECTED_BID");
-    if (asks.length != 0) require(asks[0].price == _YES_ASK, "UNEXPECTED_ASK");
+    uint256 bidDepth = bids.length != 0 && bids[0].price == _YES_BID ? bids[0].quantity : 0;
+    uint256 askDepth = asks.length != 0 && asks[0].price == _YES_ASK ? asks[0].quantity : 0;
     uint256 bidDeficit = bidDepth < _BOOK_QUANTITY ? _BOOK_QUANTITY - bidDepth : 0;
     uint256 askDeficit = askDepth < _BOOK_QUANTITY ? _BOOK_QUANTITY - askDepth : 0;
     if (bidDeficit == 0 && askDeficit == 0) return result;

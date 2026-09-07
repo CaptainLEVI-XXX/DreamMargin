@@ -1,24 +1,24 @@
 {
   "schema": "dreammargin.shannon-demo-liquidity.v1",
   "chainId": 50312,
-  "seededAtBlock": 480041653,
+  "seededAtBlock": 481792189,
   "account": "0x41363507931dD8963f5Eb836E299D74272d0ccb0",
   "vault": "0xBe415FEB724999B6c99790c681B1297309C629E4",
-  "vaultAssets": 50000000005,
+  "vaultAssets": 50000000872,
   "depositTransaction": "not-required",
   "btc": {
     "marketId": "0x0000000000000000000000000000000000000000000000000000000000013b54",
     "pool": "0x36c22823B8C08b6546c5De439aa941EA73aA9b5a",
-    "bestBid": 450000,
-    "bestAsk": 550000,
+    "bestBid": 495000,
+    "bestAsk": 505000,
     "bidDepth": 50000000000,
     "askDepth": 50000000000
   },
   "eth": {
     "marketId": "0x0000000000000000000000000000000000000000000000000000000000013b55",
     "pool": "0xC5Fa5aA238977bcC7C05290De2F1714b11559027",
-    "bestBid": 450000,
-    "bestAsk": 550000,
+    "bestBid": 495000,
+    "bestAsk": 505000,
     "bidDepth": 50000000000,
     "askDepth": 50000000000
   }

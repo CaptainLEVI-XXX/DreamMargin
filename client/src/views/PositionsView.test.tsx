@@ -101,6 +101,30 @@ describe("actions need a real, owned position", () => {
     expect(screen.getByRole("button", { name: /repay and withdraw/i })).toBeEnabled();
   });
 
+  it("offers an explicit cash close when the book can sell every share", () => {
+    const position = SCENARIOS.healthy.positions[0];
+    const snapshot = {
+      ...SCENARIOS.healthy,
+      positions: [
+        {
+          ...position,
+          market: {
+            ...position.market,
+            book: {
+              yesBids: [{ price: 550_000n, quantity: 500_000_000n }],
+              yesAsks: [],
+              noBids: [],
+              noAsks: [],
+            },
+          },
+        },
+      ],
+    };
+    render(<PositionsView snapshot={snapshot} account={ACCOUNT} />);
+    expect(screen.getByRole("button", { name: "Sell and close to tUSDC" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /withdraw YES shares/i })).toBeEnabled();
+  });
+
   it("does not submit zero when the wallet has no matching outcome shares", () => {
     const position = SCENARIOS.healthy.positions[0];
     const snapshot = {
